@@ -1,0 +1,1 @@
+{"flow_id": "ChurnModelFlow", "run_number": "1773793866421592", "step_name": "start", "task_id": "1", "field_name": "ds-root", "type": "ds-root", "value": "/home/loother/cinvestav/cinvestav_machine_learning/project/.metaflow", "tags": ["attempt_id:0"], "user_name": "loother", "ts_epoch": 1773793869035}
