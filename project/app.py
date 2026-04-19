@@ -842,9 +842,10 @@ def performance_page():
         
         cm_arr = np.array([[tn, fp], [fn, tp]])
         fig, ax = plt.subplots(figsize=(3, 3))
-        cax = ax.matshow(cm_arr, cmap='Blues', alpha=0.3)
+        cax = ax.matshow(cm_arr, cmap='Blues')
         for (i, j), z in np.ndenumerate(cm_arr):
-            ax.text(j, i, str(z), ha='center', va='center')
+            color = 'white' if z > (cm_arr.max() / 2) else 'black'
+            ax.text(j, i, str(z), ha='center', va='center', color=color)
             
         ax.set_xticks([0, 1])
         ax.set_yticks([0, 1])
