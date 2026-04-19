@@ -342,6 +342,7 @@ def _sync_model_registry() -> None:
         if name not in latest_paths:
             MODELS.pop(name, None)
             MODEL_MTIMES.pop(name, None)
+            MODEL_PATHS.pop(name, None)
 
     # Add/update models present on disk.
     for name, path in latest_paths.items():
