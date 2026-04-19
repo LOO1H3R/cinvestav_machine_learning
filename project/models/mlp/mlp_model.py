@@ -76,14 +76,15 @@ class MLPClassifier:
                 loss_val = self._loss(self.params, X, y, sample_weight)
                 self.loss_history.append(loss_val)
     
-    def predict(self, X):
-        """Get raw predictions (probabilities)."""
-        X = jnp.array(X)
-        return jnp.asarray(self._forward(self.params, X))
+    def predict(self, X, threshold=0.5):
+        """Get integer class predictions (0 or 1)."""
+        probs = self.predict_proba(X)
+        return (probs >= threshold).astype(int)
     
     def predict_proba(self, X):
         """Get class probabilities."""
-        return self.predict(X)
+        X = jnp.array(X)
+        return jnp.asarray(self._forward(self.params, X))
     
     def save(self, path):
         """Save model parameters."""

@@ -140,19 +140,19 @@ class ChurnFlow(FlowSpec):
     def train_adaboost_models(self):
         adaboost_variants = {
             "jax_logistic": {
-                "base_estimator": LogisticRegression(learning_rate=0.1, epochs=200),
+                "base_estimator": LogisticRegression(learning_rate=0.1, epochs=2000),
                 "n_estimators": 100, "learning_rate": 0.1, "random_state": 42
             },
             "decision_tree": {
-                "base_estimator": DecisionTreeModel(max_depth=5),
+                "base_estimator": DecisionTreeModel(max_depth=15),
                 "n_estimators": 150, "learning_rate": 0.05, "random_state": 42
             },
             "linear": {
-                "base_estimator": LinearModel(learning_rate=0.08, epochs=100),
+                "base_estimator": LinearModel(learning_rate=0.08, epochs=1000),
                 "n_estimators": 100, "learning_rate": 0.1, "random_state": 42
             },
             "mlp": {
-                "base_estimator": MLPClassifier(hidden_dims=[16], learning_rate=0.1, epochs=150),
+                "base_estimator": MLPClassifier(hidden_dims=[16], learning_rate=0.1, epochs=1500),
                 "n_estimators": 50, "learning_rate": 0.05, "random_state": 42
             },
         }

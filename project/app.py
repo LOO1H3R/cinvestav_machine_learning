@@ -317,7 +317,7 @@ def _load_mlflow_summary() -> list[dict[str, Any]]:
 
 
 def _load_metaflow_summary() -> list[dict[str, Any]]:
-    flow_root = BASE_DIR / ".metaflow" / "ChurnModelFlow"
+    flow_root = BASE_DIR / ".metaflow" / "ChurnFlow"
     if not flow_root.exists():
         return []
 
