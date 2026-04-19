@@ -41,7 +41,10 @@ def roc_auc_score(y_true, y_score):
     fps = (1 + thresh_idx) - tps
     tpr = np.r_[0, tps / tps[-1]]
     fpr = np.r_[0, fps / fps[-1]]
-    return float(getattr(np, 'trapezoid', getattr(np, 'trapz'))(tpr, fpr))
+    if hasattr(np, "trapezoid"):
+        return float(np.trapezoid(tpr, fpr))
+    else:
+        return float(np.trapz(tpr, fpr))
 
 def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     np.random.seed(random_state)
@@ -71,10 +74,19 @@ if str(BASE_DIR) not in sys.path:
 
 
 def _load_prediction_model(path: Path):
-    custom_model = LogisticRegression()
+    name = path.stem
+    if "adaboost" in name:
+        from project.adaboost_model import AdaBoostModel
+        model = AdaBoostModel()
+    elif "decision_tree" in name:
+        from project.decision_tree_model import DecisionTreeModel
+        model = DecisionTreeModel()
+    else:
+        model = LogisticRegression()
+        
     try:
-        custom_model.load(path)
-        return custom_model
+        model.load(path)
+        return model
     except (FileNotFoundError, EOFError, KeyError, ValueError, TypeError, AttributeError, pickle.UnpicklingError):
         return joblib.load(path)
 
