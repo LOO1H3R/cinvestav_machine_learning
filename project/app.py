@@ -1122,8 +1122,12 @@ def dataset_page():
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     num_cols = ["tenure", "MonthlyCharges", "TotalCharges"]
     for i, col in enumerate(num_cols):
-        axes[i].hist(df[col].dropna(), bins=30, color='#8b5cf6', edgecolor='white')
+        df_no = df[df["Churn"] == "No"][col].dropna()
+        df_yes = df[df["Churn"] == "Yes"][col].dropna()
+        axes[i].hist([df_no, df_yes], bins=30, stacked=True, color=['#3b82f6', '#ef4444'], label=['No Churn', 'Churn'], edgecolor='white')
         axes[i].set_title(f'Distribution of {col}')
+        if i == 0:
+            axes[i].legend()
     plt.tight_layout()
     num_b64 = get_plot_base64()
 
@@ -1131,9 +1135,14 @@ def dataset_page():
     cat_cols = ["gender", "InternetService", "Contract"]
     fig2, axes2 = plt.subplots(1, 3, figsize=(15, 4))
     for i, col in enumerate(cat_cols):
-        counts = df[col].value_counts()
-        axes2[i].bar(counts.index.astype(str), counts.values, color='#0ea5a4')
+        ct = pd.crosstab(df[col], df["Churn"])
+        for c in ["No", "Yes"]:
+            if c not in ct.columns: ct[c] = 0
+        ct = ct[["No", "Yes"]] # ensure order
+        ct.plot(kind='bar', stacked=True, color=['#3b82f6', '#ef4444'], ax=axes2[i], legend=False)
         axes2[i].set_title(f'Counts of {col}')
+        axes2[i].tick_params(axis='x', labelrotation=0)
+    fig2.legend(['No Churn', 'Churn'], loc='upper right', bbox_to_anchor=(1.0, 1.0))
     plt.tight_layout()
     cat_b64 = get_plot_base64()
 
