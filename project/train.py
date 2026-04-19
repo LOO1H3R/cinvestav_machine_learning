@@ -2,6 +2,7 @@ import os
 import sys
 # Ensure jax uses GPU if available
 os.environ["JAX_PLATFORMS"] = "cuda,cpu"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 print("JAX Devices:", jax.devices())
@@ -47,6 +48,9 @@ from models.adaboost.adaboost_model import AdaBoostModel
 from metaflow import FlowSpec, step
 import mlflow
 from mlflow.tracking import MlflowClient
+
+mlflow_db = (Path(__file__).resolve().parent / "mlruns" / "mlflow.db").resolve()
+mlflow.set_tracking_uri(f"sqlite:///{mlflow_db}")
 
 class ChurnFlow(FlowSpec):
     
@@ -94,8 +98,9 @@ class ChurnFlow(FlowSpec):
         self.y_test = y_test.values
         
         # Save scaler for API usage
-        joblib.dump(scaler, str(self.base_dir / 'scaler.pkl'))
-        joblib.dump(list(X.columns), str(self.base_dir / 'features.pkl'))
+        (self.base_dir / 'models').mkdir(exist_ok=True)
+        joblib.dump(scaler, str(self.base_dir / 'models' / 'scaler.pkl'))
+        joblib.dump(list(X.columns), str(self.base_dir / 'models' / 'features.pkl'))
         
         self.next(self.train_base_models)
         
@@ -105,28 +110,28 @@ class ChurnFlow(FlowSpec):
         self._run_and_log_model(
             model_name="jax_logistic",
             model=LogisticRegression(learning_rate=0.1, epochs=3000), 
-            artifact_path="model.pkl"
+            artifact_path="models/logistic/model.pkl"
         )
         
         # 2. Decision Tree
         self._run_and_log_model(
             model_name="decision_tree",
             model=DecisionTreeModel(max_depth=12, min_samples_split=10, min_samples_leaf=5, random_state=42), 
-            artifact_path="decision_tree.pkl"
+            artifact_path="models/decision_tree/decision_tree_model.pkl"
         )
         
         # 3. Linear Model
         self._run_and_log_model(
             model_name="linear",
             model=LinearModel(learning_rate=0.05, epochs=500), 
-            artifact_path="linear.pkl"
+            artifact_path="models/linear/linear_model.pkl"
         )
         
         # 4. MLP
         self._run_and_log_model(
             model_name="mlp",
             model=MLPClassifier(hidden_dims=[32, 16], learning_rate=0.05, epochs=1000), 
-            artifact_path="mlp.pkl"
+            artifact_path="models/mlp/mlp_model.pkl"
         )
         
         self.next(self.train_adaboost_models)
@@ -162,7 +167,7 @@ class ChurnFlow(FlowSpec):
             self._run_and_log_model(
                 model_name=f"{base_name}_adaboost",
                 model=model,
-                artifact_path=f"{base_name}_adaboost.pkl"
+                artifact_path=f"models/adaboost/{base_name}_adaboost.pkl"
             )
 
         self.next(self.end)
@@ -201,14 +206,15 @@ class ChurnFlow(FlowSpec):
             mlflow.log_metric("test_acc", float(test_acc))
             
             path_str = str(self.base_dir / artifact_path)
+            Path(path_str).parent.mkdir(parents=True, exist_ok=True)
             if hasattr(model, 'save'):
                 model.save(path_str)
             else:
                 joblib.dump(model, path_str)
             
             mlflow.log_artifact(path_str)
-            mlflow.log_artifact(str(self.base_dir / 'scaler.pkl'))
-            mlflow.log_artifact(str(self.base_dir / 'features.pkl'))
+            mlflow.log_artifact(str(self.base_dir / 'models' / 'scaler.pkl'))
+            mlflow.log_artifact(str(self.base_dir / 'models' / 'features.pkl'))
             
             self.client.set_terminated(run.info.run_id, end_time=self.start_t + 600000)
 
@@ -217,4 +223,4 @@ class ChurnFlow(FlowSpec):
         print("Completed Holy Week Training for all 8 models (4 base + 4 AdaBoost variants)!")
 
 if __name__ == '__main__':
-    HolyWeekChurnFlow()
+    ChurnFlow()
