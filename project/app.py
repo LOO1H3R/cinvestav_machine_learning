@@ -7,6 +7,17 @@ import joblib
 import numpy as np
 import pickle
 import sys
+
+import sys
+from models import model, adaboost_model, decision_tree_model, linear_model, mlp
+
+# Alias modules so pickle can find them under the old top-level names
+sys.modules['model'] = model
+sys.modules['adaboost_model'] = adaboost_model
+sys.modules['decision_tree_model'] = decision_tree_model
+sys.modules['linear_model'] = linear_model
+sys.modules['mlp'] = mlp
+
 import json
 from pathlib import Path
 from typing import Any, Dict
@@ -53,9 +64,9 @@ def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     return X[t_idx], X[ts_idx], y[t_idx], y[ts_idx]
 
 try:
-    from project.models.model import LogisticRegression
+    from models.model import LogisticRegression
 except ImportError:
-    from project.models.model import LogisticRegression
+    from models.model import LogisticRegression
 
 app = FastAPI(title="Telco Customer Churn Prediction")
 
@@ -68,10 +79,10 @@ if str(BASE_DIR) not in sys.path:
 def _load_prediction_model(path: Path):
     name = path.stem
     if "adaboost" in name:
-        from project.models.adaboost_model import AdaBoostModel
+        from models.adaboost_model import AdaBoostModel
         model = AdaBoostModel()
     elif "decision_tree" in name:
-        from project.models.decision_tree_model import DecisionTreeModel
+        from models.decision_tree_model import DecisionTreeModel
         model = DecisionTreeModel()
     else:
         model = LogisticRegression()
