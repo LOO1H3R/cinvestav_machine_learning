@@ -1,2 +1,4 @@
 .venv-jax-home/
-.vscode/
+.vscode/project/mlflow.db
+project/mlruns/
+project/.metaflow/

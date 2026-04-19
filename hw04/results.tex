@@ -1,0 +1,41 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\title{Analysis of Results: EM Algorithm vs Naive Bayes on 2D Gaussian Mixtures}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+In this experiment, we evaluated the performance of an Expectation-Maximization (EM) sequence used to estimate a Gaussian Mixture Model (GMM), alongside a Gaussian Naive Bayes supervised classifier. The evaluation was performed on two distinct datasets of two-dimensional Gaussian clusters with varying degrees of overlap, determined by theoretical error rates $\alpha$ and $\beta$.
+
+\section{Case 1: Well-Separated Clusters ($\alpha = 0.025, \beta = 0.025$)}
+For the first case, the required error bounds imply a high degree of separation. Assuming standard spherical covariances ($\Sigma = I$), an error of 0.025 on each side of the decision boundary corresponds to a $z$-score of approximately $1.96$. Consequently, the distance between the two means must be roughly $2 \times 1.96 = 3.92$. 
+
+\paragraph{Results:}
+Because the clusters are well-separated, both the Expectation-Maximization algorithm and the Naive Bayes classifier perform exceptionally well. 
+\begin{itemize}
+    \item \textbf{Naive Bayes:} As a supervised algorithm, it relies on the provided labels to compute the priors and Gaussian parameters. Given the underlying data is generated from distinct, independent Gaussians, its assumptions are perfectly met, resulting in an error rate near the theoretical limit of $\sim 2.5\%$.
+    \item \textbf{EM Algorithm:} Working completely unsupervised, the EM algorithm flawlessly identifies the two distinct Gaussian populations. The gap between clusters leaves very little ambiguity, meaning the "responsibilities" computed during the E-step are highly polarized (close to 0 or 1). The generated decision boundary directly mirrors that of the optimal Bayes classifier.
+\end{itemize}
+
+\section{Case 2: Overlapping Clusters ($\alpha = 0.25, \beta = 0.25$)}
+In the second case, the error requirement of 0.25 implies a high degree of overlap. The corresponding $z$-score is approximately $0.674$. The required distance between the cluster means shrinks to just $2 \times 0.674 \approx 1.348$.
+
+\paragraph{Results:}
+Here, the intrinsic overlap of the distributions imposes a hard ceiling on accuracy.
+\begin{itemize}
+    \item \textbf{Naive Bayes:} Even with perfect knowledge of the distribution statistics through supervised training, the optimal theoretical accuracy is limited to roughly $75\%$ (an error rate of exactly $\alpha = \beta = 25\%$). The model achieves close to this bound, misclassifying points situated across the optimal decision boundary due to the heavy inherent overlap of the data.
+    \item \textbf{EM Algorithm:} The EM algorithm is challenged by the significant data overlap. During the E-step, data points lying between the two means yield heavily mixed "responsibilities" ($\approx 0.5$ for both clusters). While it generally succeeds in approximating the true underlying mixture due to the generous sample size, its subsequent classification (by assigning each point to the highest probability component) suffers from the exact same fundamental Bayes error as the optimal classifier (roughly $\sim 25\%$).
+\end{itemize}
+
+\section{Conclusion}
+Both algorithms perform according to theoretical expectations. Naive Bayes, being a supervised approach, consistently approaches the optimal Bayesian error limit. The EM algorithm effectively models the Gaussian Mixture underlying the data without any label information, recovering the underlying spatial structure and producing classification results remarkably similar to those of Naive Bayes. The primary degradation in both models' accuracy strictly correlates with the increasing Bayes limit (inevitable overlap boundary) imposed by parameters $\alpha$ and $\beta$.
+
+\end{document}

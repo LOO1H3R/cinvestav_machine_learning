@@ -5,14 +5,26 @@ from pydantic import BaseModel
 import pandas as pd
 import joblib
 import numpy as np
+import pickle
+import sys
+import json
 from pathlib import Path
-from typing import Dict
-from model import LogisticRegression
+from typing import Any, Dict
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+from datetime import datetime
+
+try:
+    from .model import LogisticRegression
+except ImportError:
+    from model import LogisticRegression
 
 app = FastAPI(title="Telco Customer Churn Prediction")
 
 # Load model and scaler at startup
 BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 
 def _load_prediction_model(path: Path):
@@ -20,7 +32,7 @@ def _load_prediction_model(path: Path):
     try:
         custom_model.load(path)
         return custom_model
-    except Exception:
+    except (FileNotFoundError, EOFError, KeyError, ValueError, TypeError, AttributeError, pickle.UnpicklingError):
         return joblib.load(path)
 
 
@@ -40,7 +52,7 @@ def _extract_churn_probability(raw_proba) -> float:
     raise ValueError("Unsupported probability output shape")
 
 
-def _build_models_registry() -> Dict[str, object]:
+def _build_models_registry() -> Dict[str, Any]:
     models = {}
 
     default_model_path = BASE_DIR / "model.pkl"
@@ -52,7 +64,7 @@ def _build_models_registry() -> Dict[str, object]:
             continue
         try:
             models[artifact_path.stem] = _load_prediction_model(artifact_path)
-        except Exception:
+        except (FileNotFoundError, EOFError, ValueError, TypeError, AttributeError, pickle.UnpicklingError):
             continue
 
     return models
@@ -71,6 +83,186 @@ def _build_model_paths() -> Dict[str, Path]:
         paths[artifact_path.stem] = artifact_path
 
     return paths
+
+
+def _is_adaboost_variant(model_name: str) -> bool:
+    return model_name.endswith("_adaboost")
+
+
+def _base_model_names() -> list[str]:
+    return [
+        name
+        for name in MODELS.keys()
+        if not _is_adaboost_variant(name) and name != "adaboost"
+    ]
+
+
+def _prepare_features_frame(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+    df["TotalCharges"] = df["TotalCharges"].fillna(0)
+    categorical_cols = list(df.select_dtypes(include=["object"]).columns)
+    df_encoded = pd.get_dummies(df, columns=categorical_cols, drop_first=True)
+    for col in columns:
+        if col not in df_encoded.columns:
+            df_encoded[col] = 0
+    return df_encoded[columns]
+
+
+def _predict_probability(selected_model: Any, x_scaled: np.ndarray) -> float:
+    if hasattr(selected_model, "predict_proba"):
+        return _extract_churn_probability(selected_model.predict_proba(x_scaled))
+    if hasattr(selected_model, "predict"):
+        raw_pred = selected_model.predict(x_scaled)
+        raw_score = float(np.asarray(raw_pred).flatten()[0])
+        return _sigmoid(raw_score)
+    raise ValueError("Selected model has neither predict_proba nor predict")
+
+
+def _predict_probabilities(selected_model: Any, x_scaled: np.ndarray) -> np.ndarray:
+    if hasattr(selected_model, "predict_proba"):
+        raw = np.asarray(selected_model.predict_proba(x_scaled))
+        if raw.ndim == 1:
+            return raw.astype(float)
+        if raw.ndim == 2:
+            if raw.shape[1] == 1:
+                return raw[:, 0].astype(float)
+            return raw[:, 1].astype(float)
+        raise ValueError("Unsupported predict_proba output shape")
+
+    if hasattr(selected_model, "predict"):
+        raw_pred = np.asarray(selected_model.predict(x_scaled)).reshape(-1)
+        return 1.0 / (1.0 + np.exp(-raw_pred.astype(float)))
+
+    raise ValueError("Selected model has neither predict_proba nor predict")
+
+
+def _model_threshold(model_name: str) -> float:
+    if model_name in MODEL_THRESHOLDS:
+        return float(MODEL_THRESHOLDS[model_name])
+    if _is_adaboost_variant(model_name):
+        base_name = model_name[: -len("_adaboost")]
+        return float(MODEL_THRESHOLDS.get(base_name, MODEL_THRESHOLDS.get("adaboost", 0.5)))
+    return 0.5
+
+
+def _build_holdout_split() -> tuple[np.ndarray, np.ndarray]:
+    data_file = BASE_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+    if not data_file.exists():
+        raise FileNotFoundError("Dataset file not found for performance comparison")
+
+    df = pd.read_csv(data_file)
+    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+    df["TotalCharges"] = df["TotalCharges"].fillna(0)
+    df = df.dropna()
+
+    y = (df["Churn"] == "Yes").astype(int).values
+    x_raw = df.drop(columns=["customerID", "Churn"])
+    x_all = _prepare_features_frame(x_raw)
+
+    _, x_test, _, y_test = train_test_split(
+        x_all,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y,
+    )
+    x_test_scaled = scaler.transform(x_test)
+    return np.asarray(x_test_scaled), np.asarray(y_test)
+
+
+def _evaluate_model_on_holdout(model_name: str, model_obj: Any, x_test_scaled: np.ndarray, y_test: np.ndarray) -> dict[str, Any]:
+    threshold = _model_threshold(model_name)
+    probs = _predict_probabilities(model_obj, x_test_scaled)
+    preds = (probs >= threshold).astype(int)
+
+    try:
+        auc = float(roc_auc_score(y_test, probs))
+    except ValueError:
+        auc = float("nan")
+
+    return {
+        "model": model_name,
+        "base_model": model_name[: -len("_adaboost")] if _is_adaboost_variant(model_name) else model_name,
+        "variant": "AdaBoost" if _is_adaboost_variant(model_name) else "Base",
+        "threshold": threshold,
+        "accuracy": float(accuracy_score(y_test, preds)),
+        "precision": float(precision_score(y_test, preds, zero_division=0)),
+        "recall": float(recall_score(y_test, preds, zero_division=0)),
+        "f1": float(f1_score(y_test, preds, zero_division=0)),
+        "roc_auc": auc,
+    }
+
+
+def _performance_signature() -> tuple[Any, ...]:
+    data_file = BASE_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+    scaler_file = BASE_DIR / "scaler.pkl"
+    features_file = BASE_DIR / "features.pkl"
+
+    model_state = tuple((name, MODEL_MTIMES.get(name)) for name in sorted(MODELS.keys()))
+    threshold_state = tuple(sorted((k, float(v)) for k, v in MODEL_THRESHOLDS.items()))
+    file_state = (
+        data_file.stat().st_mtime if data_file.exists() else None,
+        scaler_file.stat().st_mtime if scaler_file.exists() else None,
+        features_file.stat().st_mtime if features_file.exists() else None,
+    )
+    return model_state + threshold_state + file_state
+
+
+def _load_mlflow_summary() -> list[dict[str, Any]]:
+    import sqlite3
+
+    db_path = BASE_DIR / "mlflow.db"
+    if not db_path.exists():
+        return []
+
+    connection = sqlite3.connect(str(db_path))
+    connection.row_factory = sqlite3.Row
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT
+            r.run_uuid AS run_id,
+            r.status,
+            r.start_time,
+            r.end_time,
+            r.experiment_id,
+            MAX(CASE WHEN m.key = 'test_acc' THEN m.value END) AS test_acc,
+            MAX(CASE WHEN m.key = 'train_acc' THEN m.value END) AS train_acc,
+            MAX(CASE WHEN t.key = 'mlflow.runName' THEN t.value END) AS run_name
+        FROM runs r
+        LEFT JOIN metrics m ON r.run_uuid = m.run_uuid
+        LEFT JOIN tags t ON r.run_uuid = t.run_uuid
+        GROUP BY r.run_uuid
+        ORDER BY r.start_time DESC
+        """
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    connection.close()
+    return rows
+
+
+def _load_metaflow_summary() -> list[dict[str, Any]]:
+    flow_root = BASE_DIR / ".metaflow" / "ChurnModelFlow"
+    if not flow_root.exists():
+        return []
+
+    summary: list[dict[str, Any]] = []
+    for run_dir in sorted(flow_root.iterdir(), key=lambda path: path.stat().st_mtime, reverse=True):
+        if not run_dir.is_dir() or len(run_dir.name) != 16 or not run_dir.name.isdigit() is False:
+            # The datastore contains hashed directories and run ids; keep it permissive.
+            pass
+        metadata = run_dir / "metadata"
+        if run_dir.is_dir():
+            summary.append(
+                {
+                    "name": run_dir.name,
+                    "modified": datetime.fromtimestamp(run_dir.stat().st_mtime).isoformat(timespec="seconds"),
+                    "has_metadata": metadata.exists(),
+                    "has_artifacts": any((run_dir / child).exists() for child in ["artifacts", "events", "tasks"]),
+                }
+            )
+    return summary[:30]
 
 
 def _refresh_model_if_needed(model_name: str) -> None:
@@ -111,18 +303,25 @@ if not MODELS:
 
 MODEL_PATHS = _build_model_paths()
 MODEL_MTIMES = {name: path.stat().st_mtime for name, path in MODEL_PATHS.items() if path.exists()}
+PERFORMANCE_CACHE: dict[str, Any] = {
+    "signature": None,
+    "rows": None,
+}
 
 # Tuned per-model classification thresholds.
 MODEL_THRESHOLDS = {
     "mlp": 0.55,
+    "decision_tree": 0.50,
+    "adaboost": 0.50,
 }
 
-DEFAULT_MODEL_NAME = next(iter(MODELS))
+DEFAULT_MODEL_NAME = next(iter(_base_model_names()), next(iter(MODELS)))
 scaler = joblib.load(BASE_DIR / "scaler.pkl")
 columns = joblib.load(BASE_DIR / "features.pkl")
 
 class CustomerData(BaseModel):
     model_name: str = DEFAULT_MODEL_NAME
+    use_adaboost: bool = False
     gender: str
     SeniorCitizen: int
     Partner: str
@@ -146,6 +345,7 @@ class CustomerData(BaseModel):
 @app.get("/")
 def read_root():
     _sync_model_registry()
+    base_models = [name for name in _base_model_names() if name in MODEL_PATHS]
     model_options = "".join(
         [
             (
@@ -153,7 +353,7 @@ def read_root():
                 + (' selected="selected"' if name == DEFAULT_MODEL_NAME else '')
                 + f'>{name}</option>'
             )
-            for name in MODELS.keys()
+            for name in sorted(base_models)
         ]
     )
 
@@ -272,6 +472,7 @@ def read_root():
             gap: 10px;
             align-items: center;
             margin-top: 2px;
+            flex-wrap: wrap;
         }
 
         button {
@@ -293,6 +494,18 @@ def read_root():
             background: #f3f4f6;
             color: var(--text);
             border: 1px solid var(--border);
+        }
+
+        .link-btn {
+            display: inline-block;
+            text-decoration: none;
+            border-radius: 999px;
+            padding: 11px 18px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            background: #ffffff;
+            color: var(--text);
         }
 
         .result {
@@ -334,12 +547,13 @@ def read_root():
     <main class="container">
         <section class="hero">
             <h1>Telco Customer Churn Predictor</h1>
-            <p>Fill in customer details and run a quick churn prediction using your trained model.</p>
+            <p>Fill in customer details and run a quick churn prediction.</p>
         </section>
 
         <section class="card">
             <form id="predict-form">
                 <div class="field full"><label for="model_name">Model</label><select id="model_name" name="model_name">__MODEL_OPTIONS__</select></div>
+                <div class="field full"><label for="use_adaboost">Boosting</label><select id="use_adaboost" name="use_adaboost"><option value="false">Base model</option><option value="true">AdaBoost version</option></select></div>
                 <div class="field"><label for="gender">Gender</label><select id="gender" name="gender"><option>Female</option><option>Male</option></select></div>
                 <div class="field"><label for="SeniorCitizen">Senior Citizen</label><select id="SeniorCitizen" name="SeniorCitizen"><option value="0">0 - No</option><option value="1">1 - Yes</option></select></div>
                 <div class="field"><label for="Partner">Partner</label><select id="Partner" name="Partner"><option>Yes</option><option>No</option></select></div>
@@ -363,6 +577,8 @@ def read_root():
                 <div class="actions">
                     <button type="submit">Predict Churn</button>
                     <button class="ghost" type="reset">Reset</button>
+                    <a class="link-btn" href="/performance">View Model Performance</a>
+                    <a class="link-btn" href="/tracking">View Training Data</a>
                 </div>
             </form>
 
@@ -377,6 +593,7 @@ def read_root():
         function toPayload(formData) {
             return {
                 model_name: formData.get("model_name"),
+                use_adaboost: formData.get("use_adaboost") === "true",
                 gender: formData.get("gender"),
                 SeniorCitizen: Number(formData.get("SeniorCitizen")),
                 Partner: formData.get("Partner"),
@@ -439,20 +656,32 @@ def read_root():
 @app.post("/predict")
 def predict_churn(data: CustomerData):
     _sync_model_registry()
-    selected_model_name = data.model_name if data.model_name in MODELS else DEFAULT_MODEL_NAME
+    base_model_name = data.model_name if data.model_name in MODELS else DEFAULT_MODEL_NAME
+    if _is_adaboost_variant(base_model_name):
+        base_model_name = base_model_name[: -len("_adaboost")]
+
+    selected_model_name = f"{base_model_name}_adaboost" if data.use_adaboost else base_model_name
+    if selected_model_name not in MODELS:
+        available_boosted = f"{base_model_name}_adaboost" in MODELS
+        raise ValueError(
+            f"Requested model '{selected_model_name}' not available. "
+            f"AdaBoost available for base model '{base_model_name}': {available_boosted}"
+        )
+
     _refresh_model_if_needed(selected_model_name)
     selected_model = MODELS[selected_model_name]
 
     # Convert data to dataframe
     payload = data.dict()
     payload.pop("model_name", None)
+    payload.pop("use_adaboost", None)
     df = pd.DataFrame([payload])
     
     # Process just like in training
     df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
     df['TotalCharges'] = df['TotalCharges'].fillna(0)
     
-    categorical_cols = df.select_dtypes(include=['object']).columns
+    categorical_cols = list(df.select_dtypes(include=['object']).columns)
     df_encoded = pd.get_dummies(df, columns=categorical_cols, drop_first=True)
     
     # Ensure all columns from training match
@@ -487,6 +716,358 @@ def predict_churn(data: CustomerData):
         "churn_prediction": prediction,
         "churn_probability": float(prob)
     }
+
+
+@app.get("/performance")
+def performance_page():
+    _sync_model_registry()
+
+    try:
+        signature = _performance_signature()
+        cached_rows = PERFORMANCE_CACHE.get("rows")
+
+        if PERFORMANCE_CACHE.get("signature") == signature and cached_rows is not None:
+            rows = list(cached_rows)
+        else:
+            x_test_scaled, y_test = _build_holdout_split()
+            rows = []
+            for model_name in sorted(MODELS.keys()):
+                _refresh_model_if_needed(model_name)
+                model_obj = MODELS[model_name]
+                rows.append(_evaluate_model_on_holdout(model_name, model_obj, x_test_scaled, y_test))
+            rows.sort(key=lambda r: r["f1"], reverse=True)
+            PERFORMANCE_CACHE["signature"] = signature
+            PERFORMANCE_CACHE["rows"] = list(rows)
+    except Exception as exc:
+        return HTMLResponse(
+            f"""<!doctype html>
+<html><body style='font-family:Segoe UI, sans-serif; padding:24px;'>
+<h2>Performance Comparison</h2>
+<p>Failed to compute metrics: {exc}</p>
+<p><a href='/'>Back to predictor</a></p>
+</body></html>""",
+            status_code=500,
+        )
+
+    table_rows = "".join(
+        [
+            (
+                "<tr>"
+                f"<td>{row['base_model']}</td>"
+                f"<td>{row['variant']}</td>"
+                f"<td>{row['threshold']:.2f}</td>"
+                f"<td>{row['accuracy']:.4f}</td>"
+                f"<td>{row['precision']:.4f}</td>"
+                f"<td>{row['recall']:.4f}</td>"
+                f"<td>{row['f1']:.4f}</td>"
+                f"<td>{row['roc_auc']:.4f}</td>"
+                "</tr>"
+            )
+            for row in rows
+        ]
+    )
+
+    best_row = rows[0] if rows else None
+    best_text = (
+        f"Best by F1: {best_row['model']} (F1={best_row['f1']:.4f}, AUC={best_row['roc_auc']:.4f})"
+        if best_row
+        else "No model rows available"
+    )
+
+    chart_labels = [f"{row['base_model']} ({row['variant']})" for row in rows]
+    chart_payload = {
+        "labels": chart_labels,
+        "accuracy": [row["accuracy"] for row in rows],
+        "precision": [row["precision"] for row in rows],
+        "recall": [row["recall"] for row in rows],
+        "f1": [row["f1"] for row in rows],
+        "roc_auc": [0.0 if np.isnan(row["roc_auc"]) else row["roc_auc"] for row in rows],
+    }
+    chart_json = json.dumps(chart_payload)
+
+    html = f"""<!doctype html>
+<html lang='en'>
+<head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <title>Model Performance Comparison</title>
+    <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+    <style>
+        :root {{
+            --bg-1: #f6f7fb;
+            --bg-2: #e8efff;
+            --surface: #ffffff;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --accent: #0ea5a4;
+            --accent-2: #0369a1;
+            --border: #d1d5db;
+            --shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+            --radius: 14px;
+        }}
+        * {{ box-sizing: border-box; }}
+        body {{
+            margin: 0;
+            font-family: "Poppins", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 10% 10%, #dbeafe 0%, transparent 35%),
+                radial-gradient(circle at 90% 20%, #ccfbf1 0%, transparent 30%),
+                linear-gradient(160deg, var(--bg-1), var(--bg-2));
+            min-height: 100vh;
+            padding: 24px;
+        }}
+        .container {{ max-width: 1200px; margin: 0 auto; display: grid; gap: 18px; }}
+        .hero {{
+            background: linear-gradient(135deg, #0ea5a4, #0369a1);
+            color: #fff;
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }}
+        .card {{
+            background: var(--surface);
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            overflow-x: auto;
+        }}
+        .summary {{ color: var(--muted); margin: 0; }}
+        .charts {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
+        .chart-card {{
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+        }}
+        .chart-title {{ margin: 0 0 8px 0; color: var(--text); font-size: 0.98rem; }}
+        .chart-wrap {{ position: relative; height: 330px; }}
+        table {{ width: 100%; border-collapse: collapse; min-width: 900px; }}
+        th, td {{ padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }}
+        th {{ background: #f8fafc; font-weight: 700; }}
+        .actions {{ display: flex; gap: 10px; flex-wrap: wrap; }}
+        .btn {{
+            display: inline-block;
+            text-decoration: none;
+            border-radius: 999px;
+            padding: 10px 16px;
+            border: 1px solid var(--border);
+            color: var(--text);
+            background: #fff;
+            font-weight: 600;
+        }}
+    </style>
+</head>
+<body>
+    <main class='container'>
+        <section class='hero'>
+            <h1 style='margin:0 0 8px 0;'>Model Performance Comparison</h1>
+            <p style='margin:0; opacity:.95;'>Metrics computed on a consistent 20% holdout split (same random_state and stratification as training).</p>
+        </section>
+
+        <section class='card'>
+            <p class='summary'>{best_text}</p>
+            <div class='charts'>
+                <div class='chart-card'>
+                    <p class='chart-title'>Core Classification Metrics (Accuracy / Precision / Recall / F1)</p>
+                    <div class='chart-wrap'><canvas id='coreMetricsChart'></canvas></div>
+                </div>
+                <div class='chart-card'>
+                    <p class='chart-title'>ROC AUC Comparison</p>
+                    <div class='chart-wrap'><canvas id='aucChart'></canvas></div>
+                </div>
+            </div>
+        </section>
+
+        <section class='card'>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Base Model</th>
+                        <th>Variant</th>
+                        <th>Threshold</th>
+                        <th>Accuracy</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1</th>
+                        <th>ROC AUC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {table_rows}
+                </tbody>
+            </table>
+        </section>
+
+        <section class='actions'>
+            <a class='btn' href='/'>Back to Predictor</a>
+            <a class='btn' href='/performance'>Refresh Metrics</a>
+        </section>
+    </main>
+
+    <script>
+        const perfData = {chart_json};
+
+        const coreCtx = document.getElementById('coreMetricsChart').getContext('2d');
+        new Chart(coreCtx, {{
+            type: 'bar',
+            data: {{
+                labels: perfData.labels,
+                datasets: [
+                    {{ label: 'Accuracy', data: perfData.accuracy, backgroundColor: 'rgba(14, 165, 164, 0.70)' }},
+                    {{ label: 'Precision', data: perfData.precision, backgroundColor: 'rgba(3, 105, 161, 0.70)' }},
+                    {{ label: 'Recall', data: perfData.recall, backgroundColor: 'rgba(34, 197, 94, 0.70)' }},
+                    {{ label: 'F1', data: perfData.f1, backgroundColor: 'rgba(249, 115, 22, 0.70)' }}
+                ]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {{
+                    y: {{ beginAtZero: true, max: 1, title: {{ display: true, text: 'Score' }} }},
+                    x: {{ ticks: {{ maxRotation: 35, minRotation: 20 }} }}
+                }},
+                plugins: {{
+                    legend: {{ position: 'top' }},
+                    tooltip: {{ mode: 'index', intersect: false }}
+                }}
+            }}
+        }});
+
+        const aucCtx = document.getElementById('aucChart').getContext('2d');
+        new Chart(aucCtx, {{
+            type: 'bar',
+            data: {{
+                labels: perfData.labels,
+                datasets: [
+                    {{ label: 'ROC AUC', data: perfData.roc_auc, backgroundColor: 'rgba(139, 92, 246, 0.72)' }}
+                ]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {{
+                    y: {{ beginAtZero: true, max: 1, title: {{ display: true, text: 'AUC' }} }},
+                    x: {{ ticks: {{ maxRotation: 35, minRotation: 20 }} }}
+                }},
+                plugins: {{
+                    legend: {{ position: 'top' }}
+                }}
+            }}
+        }});
+    </script>
+</body>
+</html>
+"""
+
+    return HTMLResponse(html)
+
+
+@app.get("/tracking")
+def tracking_page():
+        mlflow_rows = _load_mlflow_summary()
+        metaflow_rows = _load_metaflow_summary()
+
+        mlflow_table = "".join(
+                [
+                        (
+                                "<tr>"
+                                f"<td>{row.get('run_name') or row.get('run_id')}</td>"
+                                f"<td>{row.get('status', '')}</td>"
+                                f"<td>{row.get('experiment_id', '')}</td>"
+                                f"<td>{row.get('train_acc') if row.get('train_acc') is not None else ''}</td>"
+                                f"<td>{row.get('test_acc') if row.get('test_acc') is not None else ''}</td>"
+                                f"<td>{row.get('start_time') or ''}</td>"
+                                "</tr>"
+                        )
+                        for row in mlflow_rows[:25]
+                ]
+        ) or "<tr><td colspan='6'>No MLflow runs found.</td></tr>"
+
+        metaflow_table = "".join(
+                [
+                        (
+                                "<tr>"
+                                f"<td>{row['name']}</td>"
+                                f"<td>{row['modified']}</td>"
+                                f"<td>{'yes' if row['has_metadata'] else 'no'}</td>"
+                                f"<td>{'yes' if row['has_artifacts'] else 'no'}</td>"
+                                "</tr>"
+                        )
+                        for row in metaflow_rows
+                ]
+        ) or "<tr><td colspan='4'>No Metaflow datastore entries found.</td></tr>"
+
+        html = f"""<!doctype html>
+<html lang='en'>
+<head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <title>Tracking Summary</title>
+    <style>
+        :root {{
+            --bg-1: #f6f7fb;
+            --bg-2: #e8efff;
+            --surface: #ffffff;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --accent: #0ea5a4;
+            --accent-2: #0369a1;
+            --border: #d1d5db;
+            --shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+            --radius: 14px;
+        }}
+        * {{ box-sizing: border-box; }}
+        body {{ margin:0; font-family:"Poppins","Segoe UI",sans-serif; color:var(--text); background: linear-gradient(160deg, var(--bg-1), var(--bg-2)); min-height:100vh; padding:24px; }}
+        .container {{ max-width:1200px; margin:0 auto; display:grid; gap:18px; }}
+        .hero {{ background: linear-gradient(135deg, #0ea5a4, #0369a1); color:#fff; border-radius:var(--radius); padding:24px; box-shadow:var(--shadow); }}
+        .card {{ background:var(--surface); border:1px solid rgba(255,255,255,0.35); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px; overflow-x:auto; }}
+        table {{ width:100%; border-collapse:collapse; min-width:900px; }}
+        th, td {{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; }}
+        th {{ background:#f8fafc; font-weight:700; }}
+        .actions {{ display:flex; gap:10px; flex-wrap:wrap; }}
+        .btn {{ display:inline-block; text-decoration:none; border-radius:999px; padding:10px 16px; border:1px solid var(--border); color:var(--text); background:#fff; font-weight:600; }}
+        .muted {{ color: var(--muted); }}
+    </style>
+</head>
+<body>
+    <main class='container'>
+        <section class='hero'>
+            <h1 style='margin:0 0 8px 0;'>Tracking Summary</h1>
+            <p style='margin:0; opacity:.95;'>This page reads the local MLflow database and Metaflow datastore directly from the project folder.</p>
+        </section>
+
+        <section class='card'>
+            <h2 style='margin-top:0;'>MLflow Runs</h2>
+            <table>
+                <thead>
+                    <tr><th>Run</th><th>Status</th><th>Experiment</th><th>Train Acc</th><th>Test Acc</th><th>Started</th></tr>
+                </thead>
+                <tbody>{mlflow_table}</tbody>
+            </table>
+        </section>
+
+        <section class='card'>
+            <h2 style='margin-top:0;'>Metaflow Runs</h2>
+            <p class='muted'>Showing local datastore entries under <code>.metaflow/ChurnModelFlow</code>.</p>
+            <table>
+                <thead>
+                    <tr><th>Entry</th><th>Modified</th><th>Metadata</th><th>Artifacts</th></tr>
+                </thead>
+                <tbody>{metaflow_table}</tbody>
+            </table>
+        </section>
+
+        <section class='actions'>
+            <a class='btn' href='/'>Back to Predictor</a>
+            <a class='btn' href='/performance'>Performance Comparison</a>
+        </section>
+    </main>
+</body>
+</html>"""
+
+        return HTMLResponse(html)
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
