@@ -43,34 +43,37 @@ class MLPClassifier:
         logits = jnp.dot(z, params['w'][-1]) + params['b'][-1]
         return jax.nn.sigmoid(logits)
     
-    def _loss(self, params, X, y):
+    def _loss(self, params, X, y, sample_weight=None):
         """Binary cross-entropy loss."""
         y_pred = self._forward(params, X)
         y_pred = jnp.clip(y_pred, 1e-7, 1 - 1e-7)
-        return -jnp.mean(y * jnp.log(y_pred) + (1 - y) * jnp.log(1 - y_pred))
-    
-    def _update(self, params, X, y):
+        bce = -(y * jnp.log(y_pred) + (1 - y) * jnp.log(1 - y_pred))
+        if sample_weight is not None:
+             return jnp.sum(bce * sample_weight)
+        return jnp.mean(bce)
+
+    def _update(self, params, X, y, sample_weight=None):
         """Update parameters using gradient descent."""
-        grads = grad(self._loss)(params, X, y)
+        grads = grad(self._loss)(params, X, y, sample_weight)
         return jax.tree_util.tree_map(
             lambda p, g: p - self.lr * g,
             params,
             grads
         )
-    
-    def fit(self, X, y, X_val=None, y_val=None, print_every=100):
+
+    def fit(self, X, y, X_val=None, y_val=None, print_every=100, sample_weight=None):
         """Train the network."""
         X = jnp.array(X)
         y = jnp.array(y).reshape(-1, 1)
-        
+
         self.input_dim = X.shape[1]
         self.params = self._init_params(self.input_dim)
-        
+
         for epoch in range(self.epochs):
-            self.params = self._update(self.params, X, y)
-            
+            self.params = self._update(self.params, X, y, sample_weight)
+
             if epoch % print_every == 0:
-                loss_val = self._loss(self.params, X, y)
+                loss_val = self._loss(self.params, X, y, sample_weight)
                 self.loss_history.append(loss_val)
     
     def predict(self, X):

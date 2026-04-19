@@ -3,22 +3,28 @@ import numpy as np
 import pickle
 from .decision_tree_model import JaxDecisionTree
 
+import copy
+
 class AdaBoostModel:
     """Pure JAX/NumPy AdaBoost classifier replacing sklearn AdaBoostClassifier."""
 
     def __init__(
         self,
+        base_estimator=None,
         n_estimators: int = 300,
         learning_rate: float = 0.05,
-        max_depth: int = 2,
         random_state: int = 42,
+        **kwargs # handle discarded max_depth from train_flow
     ):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
-        self.max_depth = max_depth
         self.random_state = random_state
         self.estimators_ = []
         self.weights_ = []
+        if base_estimator is None:
+            self.base_estimator = JaxDecisionTree(max_depth=kwargs.get('max_depth', 2))
+        else:
+            self.base_estimator = base_estimator
 
     def fit(self, X, y):
         X = np.asarray(X)
@@ -32,13 +38,18 @@ class AdaBoostModel:
         self.weights_ = []
         
         for _ in range(self.n_estimators):
-            tree = JaxDecisionTree(
-                max_depth=self.max_depth, 
-                min_samples_split=2, 
-                min_samples_leaf=1,
-                random_state=self.random_state
-            )
-            tree.fit(X, y, sample_weight=w)
+            if hasattr(self.base_estimator, 'random_state'):
+                tree = copy.deepcopy(self.base_estimator)
+                tree.random_state = self.random_state + _
+            else:
+                tree = copy.deepcopy(self.base_estimator)
+            
+            # Linear model predicting mean shape mismatch fix
+            if hasattr(tree, 'learning_rate') and getattr(tree, 'epochs', 0) == 0:
+                pass
+            
+            tree.fit(X, y, sample_weight=w.reshape(-1, 1) if 'MLP' in tree.__class__.__name__ else w)
+            
             
             y_pred = np.array(tree.predict(X))
             y_pred_encoded = np.where(y_pred == 1, 1, -1)

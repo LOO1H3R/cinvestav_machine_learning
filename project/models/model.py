@@ -13,7 +13,7 @@ class Model:
         self.loss_history = []
         self.acc_history = []
 
-    def fit(self, X, y, X_val=None, y_val=None, print_every=100):
+    def fit(self, X, y, X_val=None, y_val=None, print_every=100, sample_weight=None):
         X = jnp.array(X)
         y = jnp.array(y)
         if X_val is not None and y_val is not None:
@@ -24,10 +24,10 @@ class Model:
         self.params = self._init_params(self.input_dim)
         
         for i in range(self.epochs):
-            self.params = self._update(self.params, X, y)
+            self.params = self._update(self.params, X, y, sample_weight)
             
             if i % print_every == 0:
-                loss_val = self._loss(self.params, X, y)
+                loss_val = self._loss(self.params, X, y, sample_weight)
                 self.loss_history.append(loss_val)
                 y_pred_train = self.predict(X)
                 acc_train = jnp.mean(y_pred_train == y)
@@ -41,8 +41,8 @@ class Model:
         probs = self.predict_proba(X)
         return (probs >= threshold).astype(int)
 
-    def _update(self, params, X, y):
-        grads = grad(self._loss)(params, X, y)
+    def _update(self, params, X, y, sample_weight=None):
+        grads = grad(self._loss)(params, X, y, sample_weight)
         return jax.tree_util.tree_map(lambda p, g: p - self.lr * g, params, grads)
 
     def save(self, path):
@@ -64,7 +64,10 @@ class LogisticRegression(Model):
         logits = jnp.dot(X, params['w']) + params['b']
         return jax.nn.sigmoid(logits)
 
-    def _loss(self, params, X, y):
+    def _loss(self, params, X, y, sample_weight=None):
         y_pred = self._forward(params, X)
         y_pred = jnp.clip(y_pred, 1e-7, 1 - 1e-7)
-        return -jnp.mean(y * jnp.log(y_pred) + (1 - y) * jnp.log(1 - y_pred))
+        bce = -(y * jnp.log(y_pred) + (1 - y) * jnp.log(1 - y_pred))
+        if sample_weight is not None:
+             return jnp.sum(bce * sample_weight)
+        return jnp.mean(bce)

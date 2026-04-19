@@ -29,6 +29,8 @@ def jax_train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
         return X.iloc[train_idx], X.iloc[test_idx], y.iloc[train_idx], y.iloc[test_idx]
     return X[train_idx], X[test_idx], y[train_idx], y[test_idx]
 from models.model import LogisticRegression
+from models.linear_model import LinearModel
+from models.mlp import MLPClassifier
 from models.decision_tree_model import DecisionTreeModel
 from models.adaboost_model import AdaBoostModel
 from metaflow import FlowSpec, step
@@ -136,11 +138,25 @@ class ChurnModelFlow(FlowSpec):
             mlflow.log_artifact(str(self.base_dir / 'scaler.pkl'))
             mlflow.log_artifact(str(self.base_dir / 'features.pkl'))
 
+        
+        
         adaboost_variants = {
-            "jax_logistic": {"n_estimators": 260, "learning_rate": 0.06, "max_depth": 2, "random_state": 42},
-            "decision_tree": {"n_estimators": 220, "learning_rate": 0.05, "max_depth": 2, "random_state": 42},
-            "linear": {"n_estimators": 200, "learning_rate": 0.08, "max_depth": 1, "random_state": 42},
-            "mlp": {"n_estimators": 320, "learning_rate": 0.04, "max_depth": 3, "random_state": 42},
+            "jax_logistic": {
+                "base_estimator": LogisticRegression(learning_rate=0.1, epochs=100),
+                "n_estimators": 50, "learning_rate": 0.06, "random_state": 42
+            },
+            "decision_tree": {
+                "base_estimator": DecisionTreeModel(max_depth=2),
+                "n_estimators": 50, "learning_rate": 0.05, "random_state": 42
+            },
+            "linear": {
+                "base_estimator": LinearModel(),
+                "n_estimators": 50, "learning_rate": 0.08, "random_state": 42
+            },
+            "mlp": {
+                "base_estimator": MLPClassifier(hidden_dims=[16], learning_rate=0.1, epochs=50),
+                "n_estimators": 20, "learning_rate": 0.04, "random_state": 42
+            },
         }
 
         for base_name, cfg in adaboost_variants.items():
@@ -148,13 +164,12 @@ class ChurnModelFlow(FlowSpec):
                 mlflow.log_param("base_model", base_name)
                 mlflow.log_param("n_estimators", cfg["n_estimators"])
                 mlflow.log_param("learning_rate", cfg["learning_rate"])
-                mlflow.log_param("max_depth", cfg["max_depth"])
                 mlflow.log_param("random_state", cfg["random_state"])
 
                 adaboost_model = AdaBoostModel(
+                    base_estimator=cfg["base_estimator"],
                     n_estimators=cfg["n_estimators"],
                     learning_rate=cfg["learning_rate"],
-                    max_depth=cfg["max_depth"],
                     random_state=cfg["random_state"],
                 )
                 adaboost_model.fit(self.X_train, self.y_train)
