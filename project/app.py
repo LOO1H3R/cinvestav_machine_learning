@@ -301,10 +301,12 @@ def _load_mlflow_summary() -> list[dict[str, Any]]:
             r.start_time,
             r.end_time,
             r.experiment_id,
+            MAX(CASE WHEN p.key = 'epochs' THEN p.value END) AS epochs,
             MAX(CASE WHEN m.key = 'test_acc' THEN m.value END) AS test_acc,
             MAX(CASE WHEN m.key = 'train_acc' THEN m.value END) AS train_acc,
             MAX(CASE WHEN t.key = 'mlflow.runName' THEN t.value END) AS run_name
         FROM runs r
+        LEFT JOIN params p ON r.run_uuid = p.run_uuid
         LEFT JOIN metrics m ON r.run_uuid = m.run_uuid
         LEFT JOIN tags t ON r.run_uuid = t.run_uuid
         GROUP BY r.run_uuid
@@ -1081,6 +1083,7 @@ def tracking_page():
                                 f"<td>{row.get('run_name') or row.get('run_id')}</td>"
                                 f"<td>{row.get('status', '')}</td>"
                                 f"<td>{row.get('experiment_id', '')}</td>"
+                                f"<td>{row.get('epochs', '')}</td>"
                                 f"<td>{row.get('train_acc') if row.get('train_acc') is not None else ''}</td>"
                                 f"<td>{row.get('test_acc') if row.get('test_acc') is not None else ''}</td>"
                                 f"<td>{row.get('start_time') or ''}</td>"
@@ -1088,7 +1091,7 @@ def tracking_page():
                         )
                         for row in mlflow_rows[:25]
                 ]
-        ) or "<tr><td colspan='6'>No MLflow runs found.</td></tr>"
+        ) or "<tr><td colspan='7'>No MLflow runs found.</td></tr>"
 
         metaflow_table = "".join(
                 [
@@ -1147,7 +1150,7 @@ def tracking_page():
             <h2 style='margin-top:0;'>MLflow Runs</h2>
             <table>
                 <thead>
-                    <tr><th>Run</th><th>Status</th><th>Experiment</th><th>Train Acc</th><th>Test Acc</th><th>Started</th></tr>
+                    <tr><th>Run</th><th>Status</th><th>Experiment</th><th>Epochs</th><th>Train Acc</th><th>Test Acc</th><th>Started</th></tr>
                 </thead>
                 <tbody>{mlflow_table}</tbody>
             </table>

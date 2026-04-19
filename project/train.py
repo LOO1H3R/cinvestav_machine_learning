@@ -181,6 +181,9 @@ class ChurnFlow(FlowSpec):
             
             if hasattr(model, 'epochs'):
                 mlflow.log_param("epochs", model.epochs)
+            elif hasattr(model, 'base_estimator') and hasattr(model.base_estimator, 'epochs'):
+                mlflow.log_param("epochs", model.base_estimator.epochs)
+                
             if hasattr(model, 'n_estimators'):
                 mlflow.log_param("n_estimators", model.n_estimators)
             
