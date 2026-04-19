@@ -836,7 +836,7 @@ def performance_page():
         mat_html = f"""
         <div class="cm-card" style="background:#fff; border:1px solid #d1d5db; border-radius:8px; padding:15px; text-align:center;">
             <h4 style="margin: 0 0 10px 0;">{model_display_name}</h4>
-            <table style="width:100%; border-collapse:collapse;">
+            <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
                 <tr>
                     <td></td>
                     <th style="border-bottom:1px solid #d1d5db; padding:5px;">Pred 0</th>
