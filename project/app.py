@@ -10,9 +10,52 @@ import sys
 import json
 from pathlib import Path
 from typing import Any, Dict
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.model_selection import train_test_split
 from datetime import datetime
+
+def accuracy_score(y_true, y_pred):
+    return float(np.mean(np.array(y_true) == np.array(y_pred)))
+
+def precision_score(y_true, y_pred, zero_division=0):
+    t_p = np.sum((np.array(y_true) == 1) & (np.array(y_pred) == 1))
+    p_p = np.sum(np.array(y_pred) == 1)
+    return float(t_p / p_p) if p_p > 0 else float(zero_division)
+
+def recall_score(y_true, y_pred, zero_division=0):
+    t_p = np.sum((np.array(y_true) == 1) & (np.array(y_pred) == 1))
+    a_p = np.sum(np.array(y_true) == 1)
+    return float(t_p / a_p) if a_p > 0 else float(zero_division)
+
+def f1_score(y_true, y_pred, zero_division=0):
+    p = precision_score(y_true, y_pred, zero_division)
+    r = recall_score(y_true, y_pred, zero_division)
+    return float(2 * (p * r) / (p + r)) if p + r > 0 else float(zero_division)
+
+def roc_auc_score(y_true, y_score):
+    y_t = np.array(y_true)
+    y_s = np.array(y_score)
+    desc = np.argsort(y_s)[::-1]
+    y_s, y_t = y_s[desc], y_t[desc]
+    distinct = np.where(np.diff(y_s))[0]
+    thresh_idx = np.r_[distinct, y_t.size - 1]
+    tps = np.cumsum(y_t)[thresh_idx]
+    fps = (1 + thresh_idx) - tps
+    tpr = np.r_[0, tps / tps[-1]]
+    fpr = np.r_[0, fps / fps[-1]]
+    return float(getattr(np, 'trapezoid', getattr(np, 'trapz'))(tpr, fpr))
+
+def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
+    np.random.seed(random_state)
+    y_arr = np.asarray(y)
+    t_idx, ts_idx = [], []
+    for c in np.unique(y_arr):
+        idx = np.where(y_arr == c)[0]
+        np.random.shuffle(idx)
+        spl = int(len(idx) * (1 - test_size))
+        t_idx.extend(idx[:spl])
+        ts_idx.extend(idx[spl:])
+    if hasattr(X, 'iloc'):
+        return X.iloc[t_idx], X.iloc[ts_idx], y[t_idx], y[ts_idx]
+    return X[t_idx], X[ts_idx], y[t_idx], y[ts_idx]
 
 try:
     from .model import LogisticRegression
@@ -316,6 +359,20 @@ MODEL_THRESHOLDS = {
 }
 
 DEFAULT_MODEL_NAME = next(iter(_base_model_names()), next(iter(MODELS)))
+class JaxStandardScaler:
+    def fit_transform(self, X):
+        X = np.asarray(X, dtype=float)
+        self.mean_ = np.mean(X, axis=0)
+        self.scale_ = np.std(X, axis=0)
+        self.scale_[self.scale_ == 0] = 1.0
+        return (X - self.mean_) / self.scale_
+        
+    def transform(self, X):
+        return (np.asarray(X, dtype=float) - self.mean_) / self.scale_
+
+# Workaround to fix unpickling JaxStandardScaler
+sys.modules['__main__'].JaxStandardScaler = JaxStandardScaler
+
 scaler = joblib.load(BASE_DIR / "scaler.pkl")
 columns = joblib.load(BASE_DIR / "features.pkl")
 

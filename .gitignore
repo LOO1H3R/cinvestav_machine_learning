@@ -2,3 +2,4 @@
 .vscode/project/mlflow.db
 project/mlruns/
 project/.metaflow/
+project/__pycache__

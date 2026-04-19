@@ -1,7 +1,33 @@
 import pandas as pd
 from pathlib import Path
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+import numpy as np
+
+class JaxStandardScaler:
+    def fit_transform(self, X):
+        X = np.asarray(X, dtype=float)
+        self.mean_ = np.mean(X, axis=0)
+        self.scale_ = np.std(X, axis=0)
+        self.scale_[self.scale_ == 0] = 1.0
+        return (X - self.mean_) / self.scale_
+        
+    def transform(self, X):
+        return (np.asarray(X, dtype=float) - self.mean_) / self.scale_
+
+def jax_train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
+    np.random.seed(random_state)
+    y_arr = np.asarray(y)
+    train_idx, test_idx = [], []
+    for c in np.unique(y_arr):
+        idx = np.where(y_arr == c)[0]
+        np.random.shuffle(idx)
+        split = int(len(idx) * (1 - test_size))
+        train_idx.extend(idx[:split])
+        test_idx.extend(idx[split:])
+    np.random.shuffle(train_idx)
+    np.random.shuffle(test_idx)
+    if hasattr(X, 'iloc'):
+        return X.iloc[train_idx], X.iloc[test_idx], y.iloc[train_idx], y.iloc[test_idx]
+    return X[train_idx], X[test_idx], y[train_idx], y[test_idx]
 from model import LogisticRegression
 from decision_tree_model import DecisionTreeModel
 from adaboost_model import AdaBoostModel
@@ -41,8 +67,8 @@ class ChurnModelFlow(FlowSpec):
         X = df_encoded.drop('Churn', axis=1)
         y = df_encoded['Churn']
         
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-        scaler = StandardScaler()
+        X_train, X_test, y_train, y_test = jax_train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+        scaler = JaxStandardScaler()
         self.X_train = scaler.fit_transform(X_train)
         self.X_test = scaler.transform(X_test)
         self.y_train = y_train.values

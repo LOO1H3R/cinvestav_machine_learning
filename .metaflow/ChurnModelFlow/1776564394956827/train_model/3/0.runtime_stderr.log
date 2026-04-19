@@ -1,0 +1,63 @@
+[MFLOG|0|2026-04-19T02:06:40.680061Z|runtime|6da09f83-c833-40b3-89d8-9a585bc210c9]<flow ChurnModelFlow step train_model> failed:
+[MFLOG|0|2026-04-19T02:06:40.684078Z|runtime|f77a4259-ab23-4852-ace0-884f258b9911]    Internal error
+[MFLOG|0|2026-04-19T02:06:40.685021Z|runtime|c86ecba6-de84-459d-bfe1-f6c8bdb5341b]Traceback (most recent call last):
+[MFLOG|0|2026-04-19T02:06:40.685142Z|runtime|ea74c01e-6f22-4ef0-9c20-7e1be460fa29]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/cli.py", line 727, in main
+[MFLOG|0|2026-04-19T02:06:40.685300Z|runtime|cf6d681e-e084-4e2c-9c9d-c91296cda1c1]    start(auto_envvar_prefix="METAFLOW", obj=state)
+[MFLOG|0|2026-04-19T02:06:40.685398Z|runtime|ebbee3ab-c28b-4468-bf16-3ca484892d3d]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/_vendor/click/core.py", line 829, in __call__
+[MFLOG|0|2026-04-19T02:06:40.685493Z|runtime|d3ad55f8-6013-4821-b54b-5fb2daa696ff]    return self.main(args, kwargs)
+[MFLOG|0|2026-04-19T02:06:40.685626Z|runtime|c4bd28aa-3677-4dba-bd5a-ce036ea831de]           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.685745Z|runtime|7f5770bf-803d-4005-949b-eab400616e1a]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/_vendor/click/core.py", line 782, in main
+[MFLOG|0|2026-04-19T02:06:40.685846Z|runtime|74011a5a-74d8-4d82-9343-45bd5807c624]    rv = self.invoke(ctx)
+[MFLOG|0|2026-04-19T02:06:40.685966Z|runtime|c56062cb-ddda-46b5-9aad-51f8ffb75e27]         ^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.686059Z|runtime|9f4eedc9-f635-40d0-855f-2da021543b6c]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/cli_components/utils.py", line 69, in invoke
+[MFLOG|0|2026-04-19T02:06:40.686179Z|runtime|9dd615c2-2999-4154-8ba2-d048a90a2f62]    return _process_result(sub_ctx.command.invoke(sub_ctx))
+[MFLOG|0|2026-04-19T02:06:40.686268Z|runtime|f3d703f4-c3dc-4662-8a3a-81edad9ebdf9]                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.686356Z|runtime|96303185-50cd-4711-8410-25b9692f7fc6]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/_vendor/click/core.py", line 1066, in invoke
+[MFLOG|0|2026-04-19T02:06:40.686462Z|runtime|797ac98b-a8a9-41c9-a73a-3c3d380fe2fb]    return ctx.invoke(self.callback, ctx.params)
+[MFLOG|0|2026-04-19T02:06:40.686556Z|runtime|8bdf5d7a-0197-4c76-a30f-e2d18f9a3b8c]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.686630Z|runtime|aebc0413-0c4a-4f0c-9135-53c46f8b2f2c]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/_vendor/click/core.py", line 610, in invoke
+[MFLOG|0|2026-04-19T02:06:40.686725Z|runtime|6cb360f7-6bad-4919-8b1f-4363d2f66c1d]    return callback(args, kwargs)
+[MFLOG|0|2026-04-19T02:06:40.686820Z|runtime|1197185f-9ab6-463f-b85a-64cc76e30d63]           ^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.686933Z|runtime|97363b5b-7dca-41bc-8ce0-392228c7a654]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/tracing/__init__.py", line 27, in wrapper_func
+[MFLOG|0|2026-04-19T02:06:40.687034Z|runtime|e9758e01-3afb-4bd3-81b9-696518572133]    return func(args, kwargs)
+[MFLOG|0|2026-04-19T02:06:40.687129Z|runtime|fff5a60d-6b5a-4821-88ac-35346146317b]           ^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.687217Z|runtime|e56d0b0f-be4d-480a-aa01-2ab2312f4e49]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/_vendor/click/decorators.py", line 21, in new_func
+[MFLOG|0|2026-04-19T02:06:40.687332Z|runtime|1c7890a6-a712-4c07-a0c3-a056dafadefe]    return f(get_current_context(), args, kwargs)
+[MFLOG|0|2026-04-19T02:06:40.687456Z|runtime|0a93b20b-d347-4b8d-8050-4836adb2db3a]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.687553Z|runtime|ddde85fb-0825-40f8-ae32-283a3b7fccc7]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/cli_components/step_cmd.py", line 171, in step
+[MFLOG|0|2026-04-19T02:06:40.687654Z|runtime|741132c5-c899-4d66-9ce6-badbd14e702c]    task.run_step(
+[MFLOG|0|2026-04-19T02:06:40.687741Z|runtime|155bbafb-8a96-47b4-8539-e916775b88db]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/task.py", line 899, in run_step
+[MFLOG|0|2026-04-19T02:06:40.687834Z|runtime|f7be9671-b919-4d19-b82a-b4ee8ca89947]    self._exec_step_function(step_func, orig_step_func)
+[MFLOG|0|2026-04-19T02:06:40.687927Z|runtime|321a4f1b-9b5e-48e4-b8a4-48795f8a90d3]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/task.py", line 147, in _exec_step_function
+[MFLOG|0|2026-04-19T02:06:40.688026Z|runtime|e1792489-3019-41fa-859c-f8669da19b2a]    raise raised_exception
+[MFLOG|0|2026-04-19T02:06:40.688118Z|runtime|02220bfd-7cdd-40e3-82ca-2484ca366314]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/metaflow/task.py", line 113, in _exec_step_function
+[MFLOG|0|2026-04-19T02:06:40.688213Z|runtime|673fa748-bd89-4b7b-a127-7aa6fbc8e0b5]    step_function()
+[MFLOG|0|2026-04-19T02:06:40.688306Z|runtime|9b8856ff-b21b-4dd2-abc9-12bdfb7dbac0]  File "/home/loother/cinvestav/cinvestav_machine_learning/project/train_flow.py", line 87, in train_model
+[MFLOG|0|2026-04-19T02:06:40.688428Z|runtime|4aa48c82-e99f-473b-83d8-af9b3450cc06]    mlflow.set_experiment("Telco_Churn_Experiment")
+[MFLOG|0|2026-04-19T02:06:40.688531Z|runtime|405e5f3f-77a0-4771-bc44-0f2380c7c321]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/tracking/fluent.py", line 190, in set_experiment
+[MFLOG|0|2026-04-19T02:06:40.688632Z|runtime|98db2413-cfd2-4879-8a62-4a37294b2669]    client = TrackingServiceClient(_resolve_tracking_uri())
+[MFLOG|0|2026-04-19T02:06:40.688726Z|runtime|5db77f02-1f57-4ef4-a1d4-012a61818fa4]             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.688835Z|runtime|0680f629-53c1-40b8-909a-8011d67896de]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/client.py", line 99, in __init__
+[MFLOG|0|2026-04-19T02:06:40.688934Z|runtime|e3944d32-1b04-4eb6-8166-c00390c922e1]    self.store
+[MFLOG|0|2026-04-19T02:06:40.689027Z|runtime|4a445658-f96f-4f93-8832-2e379b6bad9c]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/client.py", line 103, in store
+[MFLOG|0|2026-04-19T02:06:40.689136Z|runtime|588d3eca-6fae-4653-b1f8-eb6b84015fe0]    return utils._get_store(self.tracking_uri)
+[MFLOG|0|2026-04-19T02:06:40.689234Z|runtime|c663a63c-bef7-48dc-86ee-949375ff26f3]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.689328Z|runtime|9461a77b-8248-4b4c-8cbd-445189b38277]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/utils.py", line 270, in _get_store
+[MFLOG|0|2026-04-19T02:06:40.689444Z|runtime|aaf5b43a-2ba0-4872-9db7-551fb6365f0a]    return _tracking_store_registry.get_store(store_uri, artifact_uri)
+[MFLOG|0|2026-04-19T02:06:40.689555Z|runtime|568ad575-97af-4e45-a4ee-f984e6559178]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.689632Z|runtime|bcbbe1bf-6882-426d-ae8a-4e4063f5b260]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/registry.py", line 45, in get_store
+[MFLOG|0|2026-04-19T02:06:40.689750Z|runtime|fb187e30-dd35-4e29-980c-fce0b237840b]    return self._get_store_with_resolved_uri(resolved_store_uri, artifact_uri)
+[MFLOG|0|2026-04-19T02:06:40.689860Z|runtime|86856d75-453e-4b26-b9cb-ce1d4d61eb92]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:40.689958Z|runtime|4f5cc937-bca2-425e-b323-6c778950f870]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/registry.py", line 56, in _get_store_with_resolved_uri
+[MFLOG|0|2026-04-19T02:06:40.690056Z|runtime|8c56e7c8-dbe6-4bde-977e-5702bedfe38a]    return builder(store_uri=resolved_store_uri, artifact_uri=artifact_uri)
+[MFLOG|0|2026-04-19T02:06:40.690178Z|runtime|3f5f8357-44b6-4faa-acd9-1d697023bcfa]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:41.121338Z|runtime|261ec12d-d35d-4ae4-9778-208878f81f10]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/utils.py", line 201, in _get_sqlalchemy_store
+[MFLOG|0|2026-04-19T02:06:41.121636Z|runtime|995055f7-44ae-4f91-9775-8215a0ca58b2]    return store_cls(store_uri, artifact_uri)
+[MFLOG|0|2026-04-19T02:06:41.121852Z|runtime|28966a03-10e5-4019-8954-88cddc994163]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[MFLOG|0|2026-04-19T02:06:41.122098Z|runtime|2bb631d4-6fa1-4a03-b8fc-e883b5fff0aa]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/store/tracking/sqlalchemy_store.py", line 304, in __init__
+[MFLOG|0|2026-04-19T02:06:41.122317Z|runtime|301b2fa4-4ca3-4cfe-8280-4341189eeb39]    mlflow.store.db.utils._verify_schema(self.engine)
+[MFLOG|0|2026-04-19T02:06:41.122456Z|runtime|8b4a41e8-9023-416a-80e6-89ae83e828a2]  File "/home/loother/cinvestav/cinvestav_machine_learning/.venv-jax-home/lib/python3.12/site-packages/mlflow/store/db/utils.py", line 159, in _verify_schema
+[MFLOG|0|2026-04-19T02:06:41.122569Z|runtime|0208ed07-155e-4f5a-81b6-357cda1c279c]    raise MlflowException(
+[MFLOG|0|2026-04-19T02:06:41.122678Z|runtime|23148995-ae4f-42bb-af6c-23f169e62acd]mlflow.exceptions.MlflowException: Detected out-of-date database schema (found version c3d6457b6d8a, but expected 1b5f0d9ad7c1). Take a backup of your database, then run 'mlflow db upgrade <database_uri>' to migrate your database to the latest schema. NOTE: schema migration may result in database downtime - please consult your database's documentation for more detail.
+[MFLOG|0|2026-04-19T02:06:41.122787Z|runtime|e37d3f17-2e09-4397-a8d7-7390efcb1552]
+[MFLOG|0|2026-04-19T02:06:41.123140Z|runtime|942f87c3-0dc2-429c-b8f7-d70345993b14]Task failed.
