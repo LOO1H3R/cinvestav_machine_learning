@@ -1088,9 +1088,14 @@ def tracking_page():
         return HTMLResponse(html)
 
 
+
 @app.get("/dataset")
 def dataset_page():
     import pandas as pd
+    import matplotlib.pyplot as plt
+    import io
+    import base64
+    
     data_file = BASE_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
     if not data_file.exists():
         return HTMLResponse("<h1>Dataset not found.</h1>")
@@ -1102,10 +1107,33 @@ def dataset_page():
     missing_vals = df.isnull().sum().sum()
     churn_counts = df["Churn"].value_counts().to_dict() if "Churn" in df.columns else {}
     
-    head_html = df.head().to_html(classes="data-table", index=False)
-    desc_html = df.describe().round(2).to_html(classes="data-table")
-    dtypes_html = pd.DataFrame({"Type": df.dtypes.astype(str), "Missings": df.isnull().sum()}).to_html(classes="data-table")
-    
+    # Generate Plots
+    def get_plot_base64():
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        plt.close()
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode('utf-8')
+
+    # Numerical
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    num_cols = ["tenure", "MonthlyCharges", "TotalCharges"]
+    for i, col in enumerate(num_cols):
+        axes[i].hist(df[col].dropna(), bins=30, color='#8b5cf6', edgecolor='white')
+        axes[i].set_title(f'Distribution of {col}')
+    plt.tight_layout()
+    num_b64 = get_plot_base64()
+
+    # Categorical
+    cat_cols = ["gender", "InternetService", "Contract"]
+    fig2, axes2 = plt.subplots(1, 3, figsize=(15, 4))
+    for i, col in enumerate(cat_cols):
+        counts = df[col].value_counts()
+        axes2[i].bar(counts.index.astype(str), counts.values, color='#0ea5a4')
+        axes2[i].set_title(f'Counts of {col}')
+    plt.tight_layout()
+    cat_b64 = get_plot_base64()
+
     html = f"""<!doctype html>
 <html lang='en'>
 <head>
@@ -1134,9 +1162,7 @@ def dataset_page():
             background: var(--surface); border: 1px solid rgba(255,255,255,0.35);
             border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; overflow-x: auto;
         }}
-        .data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }}
-        .data-table th, .data-table td {{ padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }}
-        .data-table th {{ background: #f8fafc; font-weight: 600; text-transform: capitalize; }}
+        img {{ max-width: 100%; height: auto; display: block; border-radius: 8px; }}
         .actions {{ display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; }}
         .btn {{
             display: inline-block; text-decoration: none; border-radius: 999px;
@@ -1156,8 +1182,8 @@ def dataset_page():
 <body>
     <main class='container'>
         <section class='hero'>
-            <h1 style='margin:0 0 8px 0;'>Telco Customer Dataset Overview</h1>
-            <p style='margin:0; opacity:.95;'>Essential distributions and data preview of the source CSV.</p>
+            <h1 style='margin:0 0 8px 0;'>Dataset Visual Overview</h1>
+            <p style='margin:0; opacity:.95;'>Key feature distributions graphically displayed.</p>
         </section>
 
         <section class='card'>
@@ -1171,27 +1197,18 @@ def dataset_page():
         </section>
 
         <section class='card'>
-            <h2 style='margin-top:0;'>Numeric Statistics</h2>
-            {desc_html}
+            <h2 style='margin-top:0;'>Numerical Feature Distributions</h2>
+            <img src='data:image/png;base64,{num_b64}' alt='Numerical Distributions' />
         </section>
 
         <section class='card'>
-            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
-                <div>
-                    <h2 style='margin-top:0;'>Columns & Types</h2>
-                    {dtypes_html}
-                </div>
-                <div style="overflow-x: auto;">
-                    <h2 style='margin-top:0;'>Data Preview (First 5 Rows)</h2>
-                    {head_html}
-                </div>
-            </div>
+            <h2 style='margin-top:0;'>Categorical Summaries</h2>
+            <img src='data:image/png;base64,{cat_b64}' alt='Categorical Counts' />
         </section>
 
         <section class='actions'>
             <a class='btn' href='/'>Back to Predictor</a>
             <a class='btn' href='/performance'>Performance Comparison</a>
-            <a class='btn' href='/tracking'>MLflow / Metaflow Runs</a>
         </section>
     </main>
 </body>
@@ -1200,5 +1217,6 @@ def dataset_page():
     return HTMLResponse(html)
 
 if __name__ == "__main__":
+
 
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
