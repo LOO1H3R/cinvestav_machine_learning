@@ -943,6 +943,7 @@ def performance_page():
         <section class='actions'>
             <a class='btn' href='/'>Back to Predictor</a>
             <a class='btn' href='/performance'>Refresh Metrics</a>
+            <a class='btn' href='/dataset'>Dataset Overview</a>
         </section>
     </main>
 
@@ -1080,6 +1081,7 @@ def tracking_page():
         <section class='actions'>
             <a class='btn' href='/'>Back to Predictor</a>
             <a class='btn' href='/performance'>Performance Comparison</a>
+            <a class='btn' href='/dataset'>Dataset Overview</a>
         </section>
     </main>
 </body>
@@ -1210,6 +1212,7 @@ def dataset_page():
         <section class='actions'>
             <a class='btn' href='/'>Back to Predictor</a>
             <a class='btn' href='/performance'>Performance Comparison</a>
+            <a class='btn' href='/dataset'>Dataset Overview</a>
         </section>
     </main>
 </body>
