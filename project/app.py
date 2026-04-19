@@ -67,8 +67,8 @@ def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     return X[t_idx], X[ts_idx], y[t_idx], y[ts_idx]
 
 try:
-    from models.model import LogisticRegression
-except ImportError:
+    from project.models.model import LogisticRegression
+except ModuleNotFoundError:
     from models.model import LogisticRegression
 
 app = FastAPI(title="Telco Customer Churn Prediction")
