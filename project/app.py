@@ -9,7 +9,10 @@ import pickle
 import sys
 
 import sys
-from models import model, adaboost_model, decision_tree_model, linear_model, mlp
+try:
+    from project.models import model, adaboost_model, decision_tree_model, linear_model, mlp
+except ModuleNotFoundError:
+    from models import model, adaboost_model, decision_tree_model, linear_model, mlp
 
 # Alias modules so pickle can find them under the old top-level names
 sys.modules['model'] = model
