@@ -833,26 +833,34 @@ def performance_page():
     for row in rows:
         tn, fp, fn, tp = row["cm"]
         model_display_name = f"{row['base_model']} ({row['variant']})"
+        
+        # Plot confusion matrix with matplotlib
+        import matplotlib.pyplot as plt
+        import io
+        import base64
+        import numpy as np
+        
+        cm_arr = np.array([[tn, fp], [fn, tp]])
+        fig, ax = plt.subplots(figsize=(3, 3))
+        cax = ax.matshow(cm_arr, cmap='Blues', alpha=0.3)
+        for (i, j), z in np.ndenumerate(cm_arr):
+            ax.text(j, i, str(z), ha='center', va='center')
+            
+        ax.set_xticks([0, 1])
+        ax.set_yticks([0, 1])
+        ax.set_xticklabels(['Pred 0', 'Pred 1'])
+        ax.set_yticklabels(['True 0', 'True 1'])
+        ax.xaxis.set_ticks_position('bottom')
+        plt.title(f"{model_display_name}", pad=20)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", bbox_inches='tight')
+        plt.close(fig)
+        img_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        
         mat_html = f"""
         <div class="cm-card" style="background:#fff; border:1px solid #d1d5db; border-radius:8px; padding:15px; text-align:center;">
-            <h4 style="margin: 0 0 10px 0;">{model_display_name}</h4>
-            <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
-                <tr>
-                    <td></td>
-                    <th style="border-bottom:1px solid #d1d5db; padding:5px;">Pred 0</th>
-                    <th style="border-bottom:1px solid #d1d5db; padding:5px;">Pred 1</th>
-                </tr>
-                <tr>
-                    <th style="border-right:1px solid #d1d5db; padding:5px;">True 0</th>
-                    <td style="padding:5px; background: #e8efff;">{tn}</td>
-                    <td style="padding:5px; background: #fee2e2;">{fp}</td>
-                </tr>
-                <tr>
-                    <th style="border-right:1px solid #d1d5db; padding:5px;">True 1</th>
-                    <td style="padding:5px; background: #fee2e2;">{fn}</td>
-                    <td style="padding:5px; background: #e8efff;">{tp}</td>
-                </tr>
-            </table>
+            <img src="data:image/png;base64,{img_b64}" style="max-width: 100%; height: auto;" />
         </div>
         """
         cm_html_list.append(mat_html)
