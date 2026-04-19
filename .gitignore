@@ -6,3 +6,4 @@ project/mlruns/
 project/.metaflow/
 project/__pycache__
 project/models/__pycache__
+mlflow.db
