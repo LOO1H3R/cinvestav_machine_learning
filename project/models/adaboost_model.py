@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 import pickle
-from decision_tree_model import JaxDecisionTree
+from .decision_tree_model import JaxDecisionTree
 
 class AdaBoostModel:
     """Pure JAX/NumPy AdaBoost classifier replacing sklearn AdaBoostClassifier."""

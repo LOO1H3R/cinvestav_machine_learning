@@ -28,9 +28,9 @@ def jax_train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     if hasattr(X, 'iloc'):
         return X.iloc[train_idx], X.iloc[test_idx], y.iloc[train_idx], y.iloc[test_idx]
     return X[train_idx], X[test_idx], y[train_idx], y[test_idx]
-from model import LogisticRegression
-from decision_tree_model import DecisionTreeModel
-from adaboost_model import AdaBoostModel
+from models.model import LogisticRegression
+from models.decision_tree_model import DecisionTreeModel
+from models.adaboost_model import AdaBoostModel
 from metaflow import FlowSpec, step
 import mlflow
 
@@ -52,7 +52,7 @@ class ChurnModelFlow(FlowSpec):
         
     @step
     def process_data(self):
-        DATA_FILE = self.base_dir / 'WA_Fn-UseC_-Telco-Customer-Churn.csv'
+        DATA_FILE = self.base_dir / 'data' / 'WA_Fn-UseC_-Telco-Customer-Churn.csv'
         df = pd.read_csv(DATA_FILE)
         df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
         df['TotalCharges'].fillna(0, inplace=True)

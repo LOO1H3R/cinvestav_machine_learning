@@ -53,9 +53,9 @@ def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     return X[t_idx], X[ts_idx], y[t_idx], y[ts_idx]
 
 try:
-    from .model import LogisticRegression
+    from project.models.model import LogisticRegression
 except ImportError:
-    from model import LogisticRegression
+    from project.models.model import LogisticRegression
 
 app = FastAPI(title="Telco Customer Churn Prediction")
 
@@ -68,10 +68,10 @@ if str(BASE_DIR) not in sys.path:
 def _load_prediction_model(path: Path):
     name = path.stem
     if "adaboost" in name:
-        from project.adaboost_model import AdaBoostModel
+        from project.models.adaboost_model import AdaBoostModel
         model = AdaBoostModel()
     elif "decision_tree" in name:
-        from project.decision_tree_model import DecisionTreeModel
+        from project.models.decision_tree_model import DecisionTreeModel
         model = DecisionTreeModel()
     else:
         model = LogisticRegression()
@@ -194,7 +194,7 @@ def _model_threshold(model_name: str) -> float:
 
 
 def _build_holdout_split() -> tuple[np.ndarray, np.ndarray]:
-    data_file = BASE_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+    data_file = BASE_DIR / "data" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
     if not data_file.exists():
         raise FileNotFoundError("Dataset file not found for performance comparison")
 
@@ -237,7 +237,7 @@ def _evaluate_model_on_holdout(model_name: str, model_obj: Any, x_test_scaled: n
 
 
 def _performance_signature() -> tuple[Any, ...]:
-    data_file = BASE_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+    data_file = BASE_DIR / "data" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
     scaler_file = BASE_DIR / "scaler.pkl"
     features_file = BASE_DIR / "features.pkl"
 
@@ -955,7 +955,7 @@ def performance_page():
     <main class='container'>
         <section class='hero'>
             <h1 style='margin:0 0 8px 0;'>Model Performance Comparison</h1>
-            <p style='margin:0; opacity:.95;'>Metrics computed on a consistent 20% holdout split (same random_state and stratification as training).</p>
+            <p style='margin:0; opacity:.95;'>Metrics.</p>
         </section>
 
         <section class='card'>
@@ -1151,7 +1151,7 @@ def dataset_page():
     import io
     import base64
     
-    data_file = BASE_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+    data_file = BASE_DIR / "data" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
     if not data_file.exists():
         return HTMLResponse("<h1>Dataset not found.</h1>")
     
