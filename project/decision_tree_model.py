@@ -59,7 +59,7 @@ class JaxDecisionTree:
                 wl = np.sum(w[left_mask])
                 wr = np.sum(w[right_mask])
                 
-                if wl < self.min_samples_leaf or wr < self.min_samples_leaf:
+                if np.sum(left_mask) < self.min_samples_leaf or np.sum(right_mask) < self.min_samples_leaf:
                     continue
                 
                 yl = y[left_mask]
