@@ -30,22 +30,6 @@ def f1_score(y_true, y_pred, zero_division=0):
     r = recall_score(y_true, y_pred, zero_division)
     return float(2 * (p * r) / (p + r)) if p + r > 0 else float(zero_division)
 
-def roc_auc_score(y_true, y_score):
-    y_t = np.array(y_true)
-    y_s = np.array(y_score)
-    desc = np.argsort(y_s)[::-1]
-    y_s, y_t = y_s[desc], y_t[desc]
-    distinct = np.where(np.diff(y_s))[0]
-    thresh_idx = np.r_[distinct, y_t.size - 1]
-    tps = np.cumsum(y_t)[thresh_idx]
-    fps = (1 + thresh_idx) - tps
-    tpr = np.r_[0, tps / tps[-1]]
-    fpr = np.r_[0, fps / fps[-1]]
-    if hasattr(np, "trapezoid"):
-        return float(np.trapezoid(tpr, fpr))
-    else:
-        return float(np.trapz(tpr, fpr))
-
 def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     np.random.seed(random_state)
     y_arr = np.asarray(y)
@@ -231,11 +215,6 @@ def _evaluate_model_on_holdout(model_name: str, model_obj: Any, x_test_scaled: n
     probs = _predict_probabilities(model_obj, x_test_scaled)
     preds = (probs >= threshold).astype(int)
 
-    try:
-        auc = float(roc_auc_score(y_test, probs))
-    except ValueError:
-        auc = float("nan")
-
     return {
         "model": model_name,
         "base_model": model_name[: -len("_adaboost")] if _is_adaboost_variant(model_name) else model_name,
@@ -245,7 +224,6 @@ def _evaluate_model_on_holdout(model_name: str, model_obj: Any, x_test_scaled: n
         "precision": float(precision_score(y_test, preds, zero_division=0)),
         "recall": float(recall_score(y_test, preds, zero_division=0)),
         "f1": float(f1_score(y_test, preds, zero_division=0)),
-        "roc_auc": auc,
     }
 
 
@@ -829,7 +807,6 @@ def performance_page():
                 f"<td>{row['precision']:.4f}</td>"
                 f"<td>{row['recall']:.4f}</td>"
                 f"<td>{row['f1']:.4f}</td>"
-                f"<td>{row['roc_auc']:.4f}</td>"
                 "</tr>"
             )
             for row in rows
@@ -838,7 +815,7 @@ def performance_page():
 
     best_row = rows[0] if rows else None
     best_text = (
-        f"Best by F1: {best_row['model']} (F1={best_row['f1']:.4f}, AUC={best_row['roc_auc']:.4f})"
+        f"Best by F1: {best_row['model']} (F1={best_row['f1']:.4f})"
         if best_row
         else "No model rows available"
     )
@@ -850,7 +827,6 @@ def performance_page():
         "precision": [row["precision"] for row in rows],
         "recall": [row["recall"] for row in rows],
         "f1": [row["f1"] for row in rows],
-        "roc_auc": [0.0 if np.isnan(row["roc_auc"]) else row["roc_auc"] for row in rows],
     }
     chart_json = json.dumps(chart_payload)
 
@@ -942,10 +918,6 @@ def performance_page():
                     <p class='chart-title'>Core Classification Metrics (Accuracy / Precision / Recall / F1)</p>
                     <div class='chart-wrap'><canvas id='coreMetricsChart'></canvas></div>
                 </div>
-                <div class='chart-card'>
-                    <p class='chart-title'>ROC AUC Comparison</p>
-                    <div class='chart-wrap'><canvas id='aucChart'></canvas></div>
-                </div>
             </div>
         </section>
 
@@ -960,7 +932,6 @@ def performance_page():
                         <th>Precision</th>
                         <th>Recall</th>
                         <th>F1</th>
-                        <th>ROC AUC</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1000,28 +971,6 @@ def performance_page():
                 plugins: {{
                     legend: {{ position: 'top' }},
                     tooltip: {{ mode: 'index', intersect: false }}
-                }}
-            }}
-        }});
-
-        const aucCtx = document.getElementById('aucChart').getContext('2d');
-        new Chart(aucCtx, {{
-            type: 'bar',
-            data: {{
-                labels: perfData.labels,
-                datasets: [
-                    {{ label: 'ROC AUC', data: perfData.roc_auc, backgroundColor: 'rgba(139, 92, 246, 0.72)' }}
-                ]
-            }},
-            options: {{
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {{
-                    y: {{ beginAtZero: true, max: 1, title: {{ display: true, text: 'AUC' }} }},
-                    x: {{ ticks: {{ maxRotation: 35, minRotation: 20 }} }}
-                }},
-                plugins: {{
-                    legend: {{ position: 'top' }}
                 }}
             }}
         }});
