@@ -30,6 +30,14 @@ def f1_score(y_true, y_pred, zero_division=0):
     r = recall_score(y_true, y_pred, zero_division)
     return float(2 * (p * r) / (p + r)) if p + r > 0 else float(zero_division)
 
+def confusion_matrix(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    tn = np.sum((y_true == 0) & (y_pred == 0))
+    fp = np.sum((y_true == 0) & (y_pred == 1))
+    fn = np.sum((y_true == 1) & (y_pred == 0))
+    tp = np.sum((y_true == 1) & (y_pred == 1))
+    return int(tn), int(fp), int(fn), int(tp)
+
 def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     np.random.seed(random_state)
     y_arr = np.asarray(y)
@@ -224,6 +232,7 @@ def _evaluate_model_on_holdout(model_name: str, model_obj: Any, x_test_scaled: n
         "precision": float(precision_score(y_test, preds, zero_division=0)),
         "recall": float(recall_score(y_test, preds, zero_division=0)),
         "f1": float(f1_score(y_test, preds, zero_division=0)),
+        "cm": confusion_matrix(y_test, preds),
     }
 
 
@@ -820,6 +829,35 @@ def performance_page():
         else "No model rows available"
     )
 
+    cm_html_list = []
+    for row in rows:
+        tn, fp, fn, tp = row["cm"]
+        model_display_name = f"{row['base_model']} ({row['variant']})"
+        mat_html = f"""
+        <div class="cm-card" style="background:#fff; border:1px solid #d1d5db; border-radius:8px; padding:15px; text-align:center;">
+            <h4 style="margin: 0 0 10px 0;">{model_display_name}</h4>
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td></td>
+                    <th style="border-bottom:1px solid #d1d5db; padding:5px;">Pred 0</th>
+                    <th style="border-bottom:1px solid #d1d5db; padding:5px;">Pred 1</th>
+                </tr>
+                <tr>
+                    <th style="border-right:1px solid #d1d5db; padding:5px;">True 0</th>
+                    <td style="padding:5px; background: #e8efff;">{tn}</td>
+                    <td style="padding:5px; background: #fee2e2;">{fp}</td>
+                </tr>
+                <tr>
+                    <th style="border-right:1px solid #d1d5db; padding:5px;">True 1</th>
+                    <td style="padding:5px; background: #fee2e2;">{fn}</td>
+                    <td style="padding:5px; background: #e8efff;">{tp}</td>
+                </tr>
+            </table>
+        </div>
+        """
+        cm_html_list.append(mat_html)
+    cm_html_block = "<div style='display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;'>" + "".join(cm_html_list) + "</div>"
+
     chart_labels = [f"{row['base_model']} ({row['variant']})" for row in rows]
     chart_payload = {
         "labels": chart_labels,
@@ -938,6 +976,11 @@ def performance_page():
                     {table_rows}
                 </tbody>
             </table>
+        </section>
+
+        <section class='card'>
+            <h2 style='margin-top:0;'>Confusion Matrices</h2>
+            {cm_html_block}
         </section>
 
         <section class='actions'>
