@@ -1,5 +1,7 @@
 .venv-jax-home/
-.vscode/project/mlflow.db
+.vscode/
+.venv-jax/
+.metaflow/
 project/mlruns/
 project/.metaflow/
 project/__pycache__
