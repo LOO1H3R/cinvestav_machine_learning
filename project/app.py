@@ -10,16 +10,34 @@ import sys
 
 import sys
 try:
-    from project.models import model, adaboost_model, decision_tree_model, linear_model, mlp
+    from project.models.logistic import model
+    from project.models.adaboost import adaboost_model
+    from project.models.decision_tree import decision_tree_model
+    from project.models.linear import linear_model
+    from project.models.mlp import mlp_model
 except ModuleNotFoundError:
-    from models import model, adaboost_model, decision_tree_model, linear_model, mlp
+    from models.logistic import model
+    from models.adaboost import adaboost_model
+    from models.decision_tree import decision_tree_model
+    from models.linear import linear_model
+    from models.mlp import mlp_model
 
 # Alias modules so pickle can find them under the old top-level names
 sys.modules['model'] = model
 sys.modules['adaboost_model'] = adaboost_model
 sys.modules['decision_tree_model'] = decision_tree_model
 sys.modules['linear_model'] = linear_model
-sys.modules['mlp'] = mlp
+sys.modules['mlp'] = mlp_model
+
+# And alias them into the `models` hierarchy since pickle path references `models.X`
+import sys
+sys.modules['models.model'] = model
+sys.modules['models.adaboost_model'] = adaboost_model
+sys.modules['models.decision_tree_model'] = decision_tree_model
+sys.modules['models.linear_model'] = linear_model
+sys.modules['models.mlp'] = mlp_model
+sys.modules['models.mlp'] = mlp_model
+sys.modules['models.mlp.mlp_model'] = mlp_model
 
 import json
 from pathlib import Path
@@ -67,9 +85,9 @@ def train_test_split(X, y, test_size=0.2, random_state=42, stratify=None):
     return X[t_idx], X[ts_idx], y[t_idx], y[ts_idx]
 
 try:
-    from project.models.model import LogisticRegression
+    from project.models.logistic.model import LogisticRegression
 except ModuleNotFoundError:
-    from models.model import LogisticRegression
+    from models.logistic.model import LogisticRegression
 
 app = FastAPI(title="Telco Customer Churn Prediction")
 
@@ -82,11 +100,17 @@ if str(BASE_DIR) not in sys.path:
 def _load_prediction_model(path: Path):
     name = path.stem
     if "adaboost" in name:
-        from models.adaboost_model import AdaBoostModel
+        from models.adaboost.adaboost_model import AdaBoostModel
         model = AdaBoostModel()
     elif "decision_tree" in name:
-        from models.decision_tree_model import DecisionTreeModel
+        from models.decision_tree.decision_tree_model import DecisionTreeModel
         model = DecisionTreeModel()
+    elif "mlp" in name:
+        from models.mlp.mlp_model import MLPClassifier
+        model = MLPClassifier()
+    elif "linear" in name:
+        from models.linear.linear_model import LinearModel
+        model = LinearModel()
     else:
         model = LogisticRegression()
         
@@ -116,11 +140,11 @@ def _extract_churn_probability(raw_proba) -> float:
 def _build_models_registry() -> Dict[str, Any]:
     models = {}
 
-    default_model_path = BASE_DIR / "model.pkl"
+    default_model_path = BASE_DIR / "models" / "logistic" / "model.pkl"
     if default_model_path.exists():
         models["jax_logistic"] = _load_prediction_model(default_model_path)
 
-    for artifact_path in sorted(BASE_DIR.glob("*.pkl")):
+    for artifact_path in sorted(BASE_DIR.glob("models/**/*.pkl")):
         if artifact_path.name in {"model.pkl", "features.pkl", "scaler.pkl"}:
             continue
         try:
@@ -134,11 +158,11 @@ def _build_models_registry() -> Dict[str, Any]:
 def _build_model_paths() -> Dict[str, Path]:
     paths = {}
 
-    default_model_path = BASE_DIR / "model.pkl"
+    default_model_path = BASE_DIR / "models" / "logistic" / "model.pkl"
     if default_model_path.exists():
         paths["jax_logistic"] = default_model_path
 
-    for artifact_path in sorted(BASE_DIR.glob("*.pkl")):
+    for artifact_path in sorted(BASE_DIR.glob("models/**/*.pkl")):
         if artifact_path.name in {"model.pkl", "features.pkl", "scaler.pkl"}:
             continue
         paths[artifact_path.stem] = artifact_path
@@ -170,17 +194,16 @@ def _prepare_features_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df_encoded[columns]
 
 
-def _predict_probability(selected_model: Any, x_scaled: np.ndarray) -> float:
+def _predict_probability(selected_model, x_scaled) -> float:
     if hasattr(selected_model, "predict_proba"):
         return _extract_churn_probability(selected_model.predict_proba(x_scaled))
     if hasattr(selected_model, "predict"):
         raw_pred = selected_model.predict(x_scaled)
         raw_score = float(np.asarray(raw_pred).flatten()[0])
         return _sigmoid(raw_score)
-    raise ValueError("Selected model has neither predict_proba nor predict")
+    raise ValueError(f"Selected model {selected_model} of type {type(selected_model)} has neither predict_proba nor predict")
 
-
-def _predict_probabilities(selected_model: Any, x_scaled: np.ndarray) -> np.ndarray:
+def _predict_probabilities(selected_model, x_scaled):
     if hasattr(selected_model, "predict_proba"):
         raw = np.asarray(selected_model.predict_proba(x_scaled))
         if raw.ndim == 1:
@@ -189,24 +212,19 @@ def _predict_probabilities(selected_model: Any, x_scaled: np.ndarray) -> np.ndar
             if raw.shape[1] == 1:
                 return raw[:, 0].astype(float)
             return raw[:, 1].astype(float)
-        raise ValueError("Unsupported predict_proba output shape")
+        raise ValueError(f"Unsupported predict_proba output shape for {selected_model}")
 
     if hasattr(selected_model, "predict"):
         raw_pred = np.asarray(selected_model.predict(x_scaled)).reshape(-1)
         return 1.0 / (1.0 + np.exp(-raw_pred.astype(float)))
 
-    raise ValueError("Selected model has neither predict_proba nor predict")
-
+    raise ValueError(f"Selected model has neither predict_proba nor predict: {selected_model} (type {type(selected_model)})")
 
 def _model_threshold(model_name: str) -> float:
     if model_name in MODEL_THRESHOLDS:
         return float(MODEL_THRESHOLDS[model_name])
-    if _is_adaboost_variant(model_name):
-        base_name = model_name[: -len("_adaboost")]
-        return float(MODEL_THRESHOLDS.get(base_name, MODEL_THRESHOLDS.get("adaboost", 0.5)))
     return 0.5
-
-
+    
 def _build_holdout_split() -> tuple[np.ndarray, np.ndarray]:
     data_file = BASE_DIR / "data" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
     if not data_file.exists():
@@ -252,8 +270,8 @@ def _evaluate_model_on_holdout(model_name: str, model_obj: Any, x_test_scaled: n
 
 def _performance_signature() -> tuple[Any, ...]:
     data_file = BASE_DIR / "data" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
-    scaler_file = BASE_DIR / "scaler.pkl"
-    features_file = BASE_DIR / "features.pkl"
+    scaler_file = BASE_DIR / "models" / "scaler.pkl"
+    features_file = BASE_DIR / "models" / "features.pkl"
 
     model_state = tuple((name, MODEL_MTIMES.get(name)) for name in sorted(MODELS.keys()))
     threshold_state = tuple(sorted((k, float(v)) for k, v in MODEL_THRESHOLDS.items()))
@@ -268,7 +286,7 @@ def _performance_signature() -> tuple[Any, ...]:
 def _load_mlflow_summary() -> list[dict[str, Any]]:
     import sqlite3
 
-    db_path = BASE_DIR / "mlflow.db"
+    db_path = BASE_DIR / "mlruns" / "mlflow.db"
     if not db_path.exists():
         return []
 
@@ -387,8 +405,8 @@ class JaxStandardScaler:
 # Workaround to fix unpickling JaxStandardScaler
 sys.modules['__main__'].JaxStandardScaler = JaxStandardScaler
 
-scaler = joblib.load(BASE_DIR / "scaler.pkl")
-columns = joblib.load(BASE_DIR / "features.pkl")
+scaler = joblib.load(BASE_DIR / "models" / "scaler.pkl")
+columns = joblib.load(BASE_DIR / "models" / "features.pkl")
 
 class CustomerData(BaseModel):
     model_name: str = DEFAULT_MODEL_NAME
@@ -650,6 +668,7 @@ def read_root():
                     <button class="ghost" type="reset">Reset</button>
                     <a class="link-btn" href="/performance">View Model Performance</a>
                     <a class="link-btn" href="/tracking">View Training Data</a>
+                    <a class='link-btn' href='/dataset'>Dataset Overview</a>
                 </div>
             </form>
 
@@ -1209,9 +1228,167 @@ def dataset_page():
         ct.plot(kind='bar', stacked=True, color=['#3b82f6', '#ef4444'], ax=axes2[i], legend=False)
         axes2[i].set_title(f'Counts of {col}')
         axes2[i].tick_params(axis='x', labelrotation=0)
+
+
     fig2.legend(['No Churn', 'Churn'], loc='upper right', bbox_to_anchor=(1.0, 1.0))
     plt.tight_layout()
     cat_b64 = get_plot_base64()
+
+    # Advanced Categorical Analysis: Churn Rates
+    adv_cat_cols = ["PaymentMethod", "TechSupport", "PaperlessBilling", "OnlineSecurity"]
+    fig_cat_adv, axes_cat_adv = plt.subplots(1, 4, figsize=(18, 5))
+    
+    for i, col in enumerate(adv_cat_cols):
+        if col in df.columns:
+            # Calculate proportion of Churn = Yes
+            ct_pct = pd.crosstab(df[col], df["Churn"], normalize='index') * 100
+            for c in ["No", "Yes"]:
+                if c not in ct_pct.columns: ct_pct[c] = 0
+            ct_pct = ct_pct[["No", "Yes"]]
+            
+            ct_pct.plot(kind='bar', stacked=True, color=['#3b82f6', '#ef4444'], ax=axes_cat_adv[i], legend=False)
+            axes_cat_adv[i].set_title(f'Churn % by {col}')
+            axes_cat_adv[i].set_ylabel('Percentage (%)')
+            
+            # Rotate labels for long text, e.g., PaymentMethod
+            if col == "PaymentMethod":
+                axes_cat_adv[i].tick_params(axis='x', labelrotation=45)
+            else:
+                axes_cat_adv[i].tick_params(axis='x', labelrotation=0)
+
+    fig_cat_adv.legend(['No Churn', 'Churn'], loc='upper right', bbox_to_anchor=(1.0, 1.0))
+    plt.tight_layout()
+    cat_adv_b64 = get_plot_base64()
+    
+    # Feature-to-Feature comparisons
+
+    fig3, axes3 = plt.subplots(1, 2, figsize=(14, 5))
+    colors = df["Churn"].map({"Yes": "#ef4444", "No": "#3b82f6"})
+    
+    axes3[0].scatter(df["tenure"], df["MonthlyCharges"], c=colors, alpha=0.3, s=15)
+    axes3[0].set_xlabel("Tenure (Months)")
+    axes3[0].set_ylabel("Monthly Charges")
+    axes3[0].set_title("Tenure vs Monthly Charges")
+    
+    axes3[1].scatter(df["MonthlyCharges"], df["TotalCharges"], c=colors, alpha=0.3, s=15)
+    axes3[1].set_xlabel("Monthly Charges")
+    axes3[1].set_ylabel("Total Charges")
+    axes3[1].set_title("Monthly vs Total Charges")
+    
+
+    from matplotlib.lines import Line2D
+    legend_elements = [Line2D([0], [0], marker='o', color='w', label='No Churn', markerfacecolor='#3b82f6', markersize=8),
+                       Line2D([0], [0], marker='o', color='w', label='Churn', markerfacecolor='#ef4444', markersize=8)]
+    fig3.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.95, 0.95))
+    plt.tight_layout()
+    scatter_b64 = get_plot_base64()
+
+    # Tenure by Contract Boxplot
+    fig4, ax4 = plt.subplots(figsize=(10, 5))
+    
+    # We'll use seaborn if available or just matplotlib
+    import seaborn as sns
+    sns.boxplot(x="Contract", y="tenure", hue="Churn", data=df, ax=ax4, palette={"Yes": "#ef4444", "No": "#3b82f6"})
+    ax4.set_title("Tenure Distribution by Contract Type")
+    ax4.set_ylabel("Tenure (Months)")
+    plt.tight_layout()
+    boxplot_b64 = get_plot_base64()
+
+
+    # 1. Mosaic Plot (Marimekko) for Contract vs Churn
+    fig_mo, ax_mo = plt.subplots(figsize=(8, 5))
+    ct_mosaic = pd.crosstab(df['Contract'], df['Churn'])
+    props = ct_mosaic.div(ct_mosaic.sum(axis=1), axis=0)
+    widths = ct_mosaic.sum(axis=1) / ct_mosaic.sum().sum()
+    
+    cumulative_width = 0
+    colors_mo = {"No": "#3b82f6", "Yes": "#ef4444"}
+    
+    for idx, row in props.iterrows():
+        w = widths[idx]
+        y_bottom = 0
+        for col, val in row.items():
+            h = val
+            rect = plt.Rectangle((cumulative_width, y_bottom), w, h, 
+                                 edgecolor='white', facecolor=colors_mo[col])
+            ax_mo.add_patch(rect)
+            
+            # Add text
+            if h > 0.05 and w > 0.05:
+                ax_mo.text(cumulative_width + w/2, y_bottom + h/2, f"{h*100:.1f}%\\n({ct_mosaic.loc[idx, col]})", ha='center', va='center', color='white', fontsize=9, fontweight='bold')
+            y_bottom += h
+
+            
+        ax_mo.text(cumulative_width + w/2, -0.05, f"{idx}\\n(n={ct_mosaic.sum(axis=1)[idx]})", ha='center', va='top', fontsize=10)
+        cumulative_width += w
+
+
+    ax_mo.set_xlim(0, 1)
+    ax_mo.set_ylim(0, 1)
+    ax_mo.set_xticks([])
+    ax_mo.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
+    ax_mo.set_ylabel("Churn Proportion")
+    ax_mo.set_title("Mosaic Plot: Contract Type vs Churn")
+    
+    from matplotlib.patches import Patch
+    legend_elements_mo = [Patch(facecolor='#3b82f6', edgecolor='white', label='No Churn'),
+                          Patch(facecolor='#ef4444', edgecolor='white', label='Churn')]
+    ax_mo.legend(handles=legend_elements_mo, loc='upper right', bbox_to_anchor=(1.25, 1))
+    plt.tight_layout()
+    mosaic_b64 = get_plot_base64()
+
+    # 2. Chi-Square Residuals Heatmap
+    from scipy.stats import chi2_contingency
+    fig_chi, ax_chi = plt.subplots(figsize=(10, 4))
+    cols_chi = ['InternetService', 'PaymentMethod', 'Contract']
+    residuals_list = []
+    
+    for c in cols_chi:
+        ct = pd.crosstab(df[c], df['Churn'])
+        chi2, p, dof, ex = chi2_contingency(ct)
+        # Standardized residuals: (Observed - Expected) / sqrt(Expected)
+        residuals = (ct - ex) / np.sqrt(ex)
+        residuals_list.append(residuals['Yes'].rename(c))
+        
+    res_df = pd.concat(residuals_list, axis=1)
+    sns.heatmap(res_df.T, annot=True, cmap="RdBu_r", center=0, ax=ax_chi, fmt=".2f",
+                cbar_kws={'label': 'Std. Residuals (Positive = More Churn than Expected)'})
+    ax_chi.set_title("Chi-Square Standardized Residuals for Churn")
+    plt.tight_layout()
+    chi_b64 = get_plot_base64()
+
+    # 3. Categorical Point Plots (Trend across categories)
+    fig_pt, ax_pt = plt.subplots(figsize=(8, 4))
+    # Map Churn to 0 and 1
+    df_temp = df.copy()
+    df_temp["Churn_Num"] = df_temp["Churn"].map({"Yes": 1, "No": 0})
+    sns.pointplot(x="Contract", y="Churn_Num", data=df_temp, order=["Month-to-month", "One year", "Two year"], 
+                  markers='o', color="#ef4444", ax=ax_pt, capsize=.1)
+    ax_pt.set_ylabel("Average Churn Rate")
+    ax_pt.set_title("Categorical Point Plot: Churn Trend by Contract")
+    ax_pt.set_ylim(0, max(df_temp["Churn_Num"].mean() * 3, ax_pt.get_ylim()[1]))
+    ax_pt.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: '{:.0%}'.format(y)))
+    plt.tight_layout()
+    point_b64 = get_plot_base64()
+
+    # 4. Swarm / Strip Plot
+    fig_strip, ax_strip = plt.subplots(figsize=(12, 5))
+    sns.stripplot(x="PaymentMethod", y="MonthlyCharges", hue="Churn", data=df, 
+                  dodge=True, alpha=0.4, jitter=True, size=4, palette={"Yes": "#ef4444", "No": "#3b82f6"}, ax=ax_strip)
+    ax_strip.set_title("Strip Plot: Monthly Charges Distribution by Payment Method")
+    ax_strip.set_ylabel("Monthly Charges")
+    ax_strip.tick_params(axis='x', labelrotation=10)
+    plt.tight_layout()
+    strip_b64 = get_plot_base64()
+
+    # Correlation Heatmap
+
+    fig5, ax5 = plt.subplots(figsize=(8, 6))
+    num_df = df[["tenure", "MonthlyCharges", "TotalCharges"]].dropna()
+    sns.heatmap(num_df.corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax5)
+    ax5.set_title("Correlation Matrix of Numerical Features")
+    plt.tight_layout()
+    corr_b64 = get_plot_base64()
 
     html = f"""<!doctype html>
 <html lang='en'>
@@ -1281,8 +1458,38 @@ def dataset_page():
         </section>
 
         <section class='card'>
-            <h2 style='margin-top:0;'>Categorical Summaries</h2>
+            <h2 style='margin-top:0;'>Categorical Summaries (Raw Counts)</h2>
             <img src='data:image/png;base64,{cat_b64}' alt='Categorical Counts' />
+        </section>
+
+        <section class='card'>
+            <h2 style='margin-top:0;'>Deep Dive: Categorical Churn Rates (%)</h2>
+            <img src='data:image/png;base64,{cat_adv_b64}' alt='Categorical Proportions' />
+            <p style='margin-top: 10px; font-size: 0.9rem; color: var(--muted);'>This chart shows the normalized percentages (churn rates) within each category. Features like Electronic Check (Payment), lacking Tech Support, and Paperless Billing show drastically higher proportions of Churn.</p>
+        </section>
+
+        
+        <section class='card'>
+            <h2 style='margin-top:0;'>Categorical Scatter</h2>
+            <img src='data:image/png;base64,{strip_b64}' alt='Categorical Strip Plot' style='max-width: 1000px; width: 100%;'/>
+            <p style='margin-top: 10px; font-size: 0.9rem; color: var(--muted);'>Plots individual users to reveal the density and clustering of Monthly Charges broken down by Payment Method and Churn Status.</p>
+        </section>
+        
+        <section class='card'>
+            <h2 style='margin-top:0;'>Feature-to-Feature Analysis</h2>
+            <img src='data:image/png;base64,{scatter_b64}' alt='Scatter Plots' />
+        </section>
+
+        <section class='card'>
+            <h2 style='margin-top:0;'>Tenure by Contract Type</h2>
+            <img src='data:image/png;base64,{boxplot_b64}' alt='Boxplot' />
+            <p style='margin-top: 10px; font-size: 0.9rem; color: var(--muted);'>This plot shows how the distribution of customer tenure varies across different contract types, separated by churn status. Month-to-month contracts typically have much shorter tenures and higher churn.</p>
+        </section>
+
+        <section class='card'>
+            <h2 style='margin-top:0;'>Correlation Heatmap</h2>
+            <img src='data:image/png;base64,{corr_b64}' alt='Correlation Heatmap' style='max-width: 600px; margin: auto;'/>
+            <p style='margin-top: 10px; font-size: 0.9rem; color: var(--muted); text-align: center;'>Identifies multicollinearity between continuous features. Total Charges is heavily dependent on Tenure and Monthly Charges.</p>
         </section>
 
         <section class='actions'>
