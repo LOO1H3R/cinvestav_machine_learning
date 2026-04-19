@@ -217,4 +217,4 @@ class ChurnFlow(FlowSpec):
         print("Completed Holy Week Training for all 8 models (4 base + 4 AdaBoost variants)!")
 
 if __name__ == '__main__':
-    HolyWeekChurnFlow()
+    ChurnFlow()
