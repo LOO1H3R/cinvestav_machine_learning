@@ -45,6 +45,7 @@ from models.linear.linear_model import LinearModel
 from models.mlp.mlp_model import MLPClassifier
 from models.decision_tree.decision_tree_model import DecisionTreeModel
 from models.adaboost.adaboost_model import AdaBoostModel
+from models.mixture.mixture_model import MixtureModel
 from metaflow import FlowSpec, step
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -107,54 +108,65 @@ class ChurnFlow(FlowSpec):
     @step
     def train_base_models(self):
         # 1. Jax Logistic
-        self._run_and_log_model(
-            model_name="jax_logistic",
-            model=LogisticRegression(learning_rate=0.1, epochs=3000), 
-            artifact_path="models/logistic/model.pkl"
-        )
+        # self._run_and_log_model(
+        #     model_name="jax_logistic",
+        #     model=LogisticRegression(learning_rate=0.1, epochs=3000), 
+        #     artifact_path="models/logistic/model.pkl"
+        # )
         
-        # 2. Decision Tree
-        self._run_and_log_model(
-            model_name="decision_tree",
-            model=DecisionTreeModel(max_depth=12, min_samples_split=10, min_samples_leaf=5, random_state=42), 
-            artifact_path="models/decision_tree/decision_tree_model.pkl"
-        )
+        # # 2. Decision Tree
+        # self._run_and_log_model(
+        #     model_name="decision_tree",
+        #     model=DecisionTreeModel(max_depth=12, min_samples_split=10, min_samples_leaf=5, random_state=42), 
+        #     artifact_path="models/decision_tree/decision_tree.pkl"
+        # )
         
-        # 3. Linear Model
-        self._run_and_log_model(
-            model_name="linear",
-            model=LinearModel(learning_rate=0.05, epochs=500), 
-            artifact_path="models/linear/linear_model.pkl"
-        )
+        # # 3. Linear Model
+        # self._run_and_log_model(
+        #     model_name="linear",
+        #     model=LinearModel(learning_rate=0.05, epochs=500), 
+        #     artifact_path="models/linear/linear.pkl"
+        # )
         
-        # 4. MLP
-        self._run_and_log_model(
-            model_name="mlp",
-            model=MLPClassifier(hidden_dims=[32, 16], learning_rate=0.05, epochs=1000), 
-            artifact_path="models/mlp/mlp_model.pkl"
-        )
+        # # 4. MLP
+        # self._run_and_log_model(
+        #     model_name="mlp",
+        #     model=MLPClassifier(hidden_dims=[32, 16], learning_rate=0.05, epochs=1000), 
+        #     artifact_path="models/mlp/mlp.pkl"
+        # )
+        
+        # # 5. Mixture Model
+        # self._run_and_log_model(
+        #     model_name="mixture",
+        #     model=MixtureModel(num_experts=3, learning_rate=0.05, epochs=1000),
+        #     artifact_path="models/mixture/mixture.pkl"
+        # )
         
         self.next(self.train_adaboost_models)
         
     @step
     def train_adaboost_models(self):
         adaboost_variants = {
-            "jax_logistic": {
-                "base_estimator": LogisticRegression(learning_rate=0.1, epochs=2000),
-                "n_estimators": 100, "learning_rate": 0.1, "random_state": 42
-            },
-            "decision_tree": {
-                "base_estimator": DecisionTreeModel(max_depth=15),
-                "n_estimators": 150, "learning_rate": 0.05, "random_state": 42
-            },
-            "linear": {
-                "base_estimator": LinearModel(learning_rate=0.08, epochs=1000),
-                "n_estimators": 100, "learning_rate": 0.1, "random_state": 42
-            },
-            "mlp": {
-                "base_estimator": MLPClassifier(hidden_dims=[16], learning_rate=0.1, epochs=1500),
-                "n_estimators": 50, "learning_rate": 0.05, "random_state": 42
-            },
+            # "jax_logistic": {
+            #     "base_estimator": LogisticRegression(learning_rate=0.1, epochs=2000),
+            #     "n_estimators": 100, "learning_rate": 0.1, "random_state": 42
+            # },
+            # "decision_tree": {
+            #     "base_estimator": DecisionTreeModel(max_depth=15),
+            #     "n_estimators": 150, "learning_rate": 0.05, "random_state": 42
+            # },
+            # "linear": {
+            #     "base_estimator": LinearModel(learning_rate=0.08, epochs=1000),
+            #     "n_estimators": 100, "learning_rate": 0.1, "random_state": 42
+            # },
+            # "mlp": {
+            #     "base_estimator": MLPClassifier(hidden_dims=[16], learning_rate=0.1, epochs=1500),
+            #     "n_estimators": 50, "learning_rate": 0.05, "random_state": 42
+            # },
+            "mixture": {
+                "base_estimator": MixtureModel(num_experts=2, learning_rate=0.1, epochs=100),
+                "n_estimators": 25, "learning_rate": 0.05, "random_state": 42
+            }
         }
 
         for base_name, cfg in adaboost_variants.items():
@@ -223,7 +235,7 @@ class ChurnFlow(FlowSpec):
 
     @step
     def end(self):
-        print("Completed Holy Week Training for all 8 models (4 base + 4 AdaBoost variants)!")
+        print("Completed Holy Week Training for all 10 models (5 base + 5 AdaBoost variants)!")
 
 if __name__ == '__main__':
     ChurnFlow()

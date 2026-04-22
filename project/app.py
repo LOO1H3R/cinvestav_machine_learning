@@ -15,12 +15,14 @@ try:
     from project.models.decision_tree import decision_tree_model
     from project.models.linear import linear_model
     from project.models.mlp import mlp_model
+    from project.models.mixture import mixture_model
 except ModuleNotFoundError:
     from models.logistic import model
     from models.adaboost import adaboost_model
     from models.decision_tree import decision_tree_model
     from models.linear import linear_model
     from models.mlp import mlp_model
+    from models.mixture import mixture_model
 
 # Alias modules so pickle can find them under the old top-level names
 sys.modules['model'] = model
@@ -28,6 +30,7 @@ sys.modules['adaboost_model'] = adaboost_model
 sys.modules['decision_tree_model'] = decision_tree_model
 sys.modules['linear_model'] = linear_model
 sys.modules['mlp'] = mlp_model
+sys.modules['mixture_model'] = mixture_model
 
 # And alias them into the `models` hierarchy since pickle path references `models.X`
 import sys
@@ -36,8 +39,9 @@ sys.modules['models.adaboost_model'] = adaboost_model
 sys.modules['models.decision_tree_model'] = decision_tree_model
 sys.modules['models.linear_model'] = linear_model
 sys.modules['models.mlp'] = mlp_model
-sys.modules['models.mlp'] = mlp_model
 sys.modules['models.mlp.mlp_model'] = mlp_model
+sys.modules['models.mixture'] = mixture_model
+sys.modules['models.mixture.mixture_model'] = mixture_model
 
 import json
 from pathlib import Path
@@ -111,6 +115,9 @@ def _load_prediction_model(path: Path):
     elif "linear" in name:
         from models.linear.linear_model import LinearModel
         model = LinearModel()
+    elif "mixture" in name:
+        from models.mixture.mixture_model import MixtureModel
+        model = MixtureModel()
     else:
         model = LogisticRegression()
         
@@ -142,7 +149,7 @@ def _build_models_registry() -> Dict[str, Any]:
 
     default_model_path = BASE_DIR / "models" / "logistic" / "model.pkl"
     if default_model_path.exists():
-        models["jax_logistic"] = _load_prediction_model(default_model_path)
+        models["logistic"] = _load_prediction_model(default_model_path)
 
     for artifact_path in sorted(BASE_DIR.glob("models/**/*.pkl")):
         if artifact_path.name in {"model.pkl", "features.pkl", "scaler.pkl"}:
@@ -160,7 +167,7 @@ def _build_model_paths() -> Dict[str, Path]:
 
     default_model_path = BASE_DIR / "models" / "logistic" / "model.pkl"
     if default_model_path.exists():
-        paths["jax_logistic"] = default_model_path
+        paths["logistic"] = default_model_path
 
     for artifact_path in sorted(BASE_DIR.glob("models/**/*.pkl")):
         if artifact_path.name in {"model.pkl", "features.pkl", "scaler.pkl"}:
@@ -390,6 +397,7 @@ MODEL_THRESHOLDS = {
     "mlp": 0.55,
     "decision_tree": 0.50,
     "adaboost": 0.50,
+    "mixture": 0.50,
 }
 
 DEFAULT_MODEL_NAME = next(iter(_base_model_names()), next(iter(MODELS)))
@@ -815,6 +823,18 @@ def performance_page():
     _sync_model_registry()
 
     try:
+        data_file = BASE_DIR / "data" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+        if not data_file.exists():
+             return HTMLResponse(
+                """<!doctype html>
+<html><body style='font-family:Segoe UI, sans-serif; padding:24px;'>
+<h2>Performance Comparison</h2>
+<p>Dataset file not found! To view live model performance comparison, you need the original CSV file present at <code>data/WA_Fn-UseC_-Telco-Customer-Churn.csv</code>.</p>
+<p><a href='/'>Back to predictor</a></p>
+</body></html>""",
+                status_code=200,
+            )
+             
         signature = _performance_signature()
         cached_rows = PERFORMANCE_CACHE.get("rows")
 
